@@ -623,6 +623,19 @@ class _EditSession:
     #: the reviewer, which already builds with them.
     extra_sources: Tuple[str, ...] = ()
     include_dirs: Tuple[str, ...] = ()
+    #: **WHAT DECIDES WHETHER A COMMIT IS KEPT.** "checks" (the default): passing shipped
+    #: requirements rise, or hold while the gradient falls. "consensus": the design's agreement
+    #: with designs generated independently from the same specification rises (`latch_gate`, a
+    #: `consensus_gate.ConsensusGate`). The checks still say what to fix; the agreement decides
+    #: whether the fix is kept. Audited commit by commit against golden, the checks' verdict was
+    #: unrelated in direction to golden's, and the agreement's change tracked it
+    #: (docs/evidence/e7/FEEDBACK-AUDIT.md, LATCH-OFFLINE.md).
+    latch_rule: str = "checks"
+    latch_gate: Any = None
+    #: Best agreement seen, when `latch_rule` is "consensus": `note_best` ranks on it then.
+    best_agreement: float | None = None
+    #: The accepted design's agreement, for stall detection under the consensus latch.
+    accepted_agreement: float | None = None
     #: Best (lowest) mismatch count seen this session, and the RTL that produced
     #: it. Recorded on every simulated edit regardless of accept/rollback, and
     #: restored before `chat()` returns -- so with the guard off the loop is
@@ -1503,8 +1516,80 @@ class _EditSession:
         dark = {u for u, (r, _t) in rr.items() if getattr(r, "ok", None) is None}
         return ok, bad, dark
 
+    def _consensus_decision(self, result, consensus, req_before, req_after, old_file_content,
+                            sim_mismatch_cnt, new_fail_time, sim_output,
+                            is_sim_pass=False) -> Dict[str, Any]:
+        """Keep the commit iff agreement with the independent designs rises.
+
+        The requirement split is still reported, for the agent to steer by; it does not judge.
+        """
+        a0, a1 = consensus["before"], consensus["after"]
+
+        def pct(v):
+            return "n/a" if v is None else f"{100 * v:.2f}%"
+        req_note = ""
+        if req_before is not None and req_after is not None:
+            ok0, bad0, dark0 = req_before
+            ok1, bad1, dark1 = req_after
+            result["requirements"] = {
+                "passing": f"{len(ok0)} -> {len(ok1)}",
+                "failing": f"{len(bad0)} -> {len(bad1)}",
+                "uncovered": f"{len(dark0)} -> {len(dark1)}",
+                "repaired": sorted(bad0 & ok1),
+                "broken": sorted(ok0 & bad1),
+                "silenced": sorted(bad0 & dark1),
+                "went_dark_from_passing": sorted(ok0 & dark1),
+            }
+            req_note = (f"  The checks: passing requirements {len(ok0)} -> {len(ok1)}"
+                        + (f", repairing {', '.join(sorted(bad0 & ok1))}" if bad0 & ok1 else "")
+                        + (f", breaking {', '.join(sorted(ok0 & bad1))}" if ok0 & bad1 else "") + ".")
+        away = consensus.get("outputs_moved_away") or []
+        away_note = (f"  Outputs that moved AWAY from the independent designs: {', '.join(away)}."
+                     if away else "")
+        n = consensus.get("peers") or 0
+        if consensus.get("rises"):
+            self.last_mismatch_cnt = sim_mismatch_cnt
+            if new_fail_time is not None:
+                self.last_fail_time = int(new_fail_time)
+            result["is_action_executed"] = True
+            if req_after is not None:
+                self._accepted_req_split = req_after
+            result["accept_reason"] = (
+                f"LATCHED ON AGREEMENT: the design now agrees with the {n} independently generated "
+                f"designs on {pct(a1)} of edges (was {pct(a0)}).{req_note}{away_note}")
+            self.accepted_agreement = a1
+            if is_sim_pass and sim_mismatch_cnt == 0:
+                self.is_done = True
+            else:
+                self._refresh_trace(sim_log_json=sim_output)
+                result["trace_summary"] = self.trace_summary()
+            return result
+        if not self.rollback_on_regression:
+            self.last_mismatch_cnt = sim_mismatch_cnt
+            if new_fail_time is not None:
+                self.last_fail_time = int(new_fail_time)
+            result["is_action_executed"] = True
+            if req_after is not None:
+                self._accepted_req_split = req_after
+            result["kept_despite_no_improvement"] = True
+            result["accept_reason"] = (
+                f"KEPT WITHOUT IMPROVING (rollback guard off): agreement {pct(a0)} -> {pct(a1)}."
+                f"{req_note}{away_note}  The best version seen is what the session returns.")
+            self._refresh_trace(sim_log_json=sim_output)
+            result["trace_summary"] = self.trace_summary()
+            return result
+        self.write_rtl(old_file_content)
+        result["error_msg"] = (
+            f"Commit did NOT latch: agreement with the {n} independently generated designs went "
+            f"{pct(a0)} -> {pct(a1)} of edges, and a commit latches only when it RISES. The "
+            f"accepted RTL is unchanged and your staged edits are kept -- adjust them and commit "
+            f"again.{req_note}{away_note}  A change that satisfies a check while moving outputs "
+            f"away from every independent reading of the specification is more likely a new "
+            f"defect than a fix.")
+        return result
+
     def note_best(self, mismatch_cnt: int, rtl_text: str,
-                  passing: int | None = None) -> bool:
+                  passing: int | None = None, agreement: float | None = None) -> bool:
         """Record `rtl_text` if it is the best seen. Returns True when it is.
 
         BEST BY THE SAME QUANTITY THE COMMIT IS JUDGED ON. This keyed on
@@ -1520,7 +1605,17 @@ class _EditSession:
         Ties do NOT overwrite: the earliest RTL achieving a given score is kept,
         so a run that wanders across a plateau returns the point it reached
         first rather than the last one it happened to touch.
+
+        Under the consensus latch, `agreement` is what commits are judged on, so it ranks.
         """
+        if agreement is not None:
+            if self.best_agreement is None or agreement > self.best_agreement + 1e-12:
+                self.best_agreement = float(agreement)
+                self.best_rtl = rtl_text
+                if passing is not None:
+                    self.best_passing = int(passing)
+                return True
+            return False
         if passing is not None:
             if self.best_passing is None or int(passing) > self.best_passing:
                 self.best_passing = int(passing)
@@ -2059,12 +2154,18 @@ class _EditSession:
         # the one it had kept. MEASURED on the rep corpora: passing fell between
         # two reviews in 5 of 17 RTL Editor jobs (luna13 byte_ctrl 73 -> 71, its
         # only commit, not latched). Recorded first, so a tie keeps the start.
+        consensus = None
+        if self.latch_rule == "consensus" and self.latch_gate is not None:
+            consensus = self.latch_gate.judge(old_file_content, self.read_rtl())
+            result["agreement"] = consensus
         if self.best_rtl is None:
             self.note_best(prev_mismatch_cnt, old_file_content,
-                           passing=len(req_before[0]) if req_before is not None else None)
+                           passing=len(req_before[0]) if req_before is not None else None,
+                           agreement=consensus["before"] if consensus else None)
         improved_best = self.note_best(
             sim_mismatch_cnt, self.read_rtl(),
-            passing=len(req_after[0]) if req_after is not None else None)
+            passing=len(req_after[0]) if req_after is not None else None,
+            agreement=consensus["after"] if consensus else None)
         result["best_mismatch_cnt"] = self.best_mismatch_cnt
 
         # THE ACCEPT CRITERION IS PASSING REQUIREMENTS, WHEN THERE ARE ANY.
@@ -2094,6 +2195,10 @@ class _EditSession:
         # UNCOVERED -> PASSING raises it, and those are the two things a repair
         # is supposed to do. The testpoint count stays, reported, as the fine
         # gradient §6.2(a) asks for -- to steer, not to judge.
+        if consensus is not None:
+            return self._consensus_decision(result, consensus, req_before, req_after,
+                                            old_file_content, sim_mismatch_cnt, new_fail_time,
+                                            sim_output, is_sim_pass=is_sim_pass)
         if req_before is not None and req_after is not None:
             ok0, bad0, dark0 = req_before
             ok1, bad1, dark1 = req_after
@@ -2363,6 +2468,45 @@ class _StallCounter:
                            else reference)
 
 
+#: (anchor, replacement) pairs `workflow_prompt` applies. Each anchor must occur exactly once in
+#: the prompt it edits: a silent no-op would leave the agent told the opposite of what the run does.
+_FULL_VIEW_EDITS = (
+    ("- Only modify code inside suspect blocks.",
+     "- You may modify ANY part of the design. Before changing what a signal does, find every block "
+     "that reads it -- the whole design is in <rtl_design>, and _tool_read_design() shows it as "
+     "staged. A change to a signal other blocks rely on breaks behaviour that no failing check is "
+     "about, and nothing will point at it."),
+    ("You MUST only modify code inside suspect blocks.",
+     "The suspect blocks are where the failing checks point; the whole design is yours to read and "
+     "edit."),
+    ("- _tool_read_block(block_id)\n",
+     "- _tool_read_block(block_id)\n"
+     "- _tool_read_design()                       the whole design, staged  free\n"),
+)
+_CONSENSUS_EDITS = (
+    ("   only one. If it improves, the batch is latched.",
+     "   only one. In this run a batch is latched when the design's agreement with\n"
+     "   several designs generated INDEPENDENTLY from the same specification RISES.\n"
+     "   You never see those designs. The checks tell you what is wrong; the\n"
+     "   agreement decides whether your change is kept."),
+)
+
+
+def workflow_prompt(checks_only: bool, *, full_view: bool = False, latch_rule: str = "checks") -> str:
+    """The editor's workflow and rules, for its feedback mode, view and latch."""
+    text = EXTRA_ORDER_PROMPT_CHECKS if checks_only else EXTRA_ORDER_PROMPT
+    edits = (_FULL_VIEW_EDITS if full_view else ()) + (_CONSENSUS_EDITS if latch_rule == "consensus" else ())
+    for old, new in edits:
+        if text.count(old) != 1:
+            raise ValueError(f"workflow prompt anchor not found exactly once: {old[:50]!r}")
+        text = text.replace(old, new)
+    return text
+
+
+def _numbered(text: str) -> str:
+    return "\n".join(f"{i + 1}: {line}" for i, line in enumerate(text.splitlines()))
+
+
 class RTLEditor:
     def __init__(
         self,
@@ -2419,12 +2563,28 @@ class RTLEditor:
         requirements: dict | None = None,
         #: The port contract, for `ports_read` and the perturbation's widths.
         contract: dict | None = None,
+        #: What keeps a commit: "checks" (passing shipped requirements rise) or "consensus"
+        #: (agreement with independently generated designs rises; needs `latch_gate`). See
+        #: `_EditSession.latch_rule`.
+        latch_rule: str = "checks",
+        latch_gate: object | None = None,
+        #: Show the agent the WHOLE design, not only the suspect blocks a failing check slices,
+        #: and let it edit anywhere. A slice hides the other readers of a signal, which is where
+        #: an edit's unintended consequences land (docs/evidence/e7/REPAIR-ANATOMY.md).
+        full_view: bool = False,
     ) -> None:
         self._cfg = cfg
         self.sim_reviewer = sim_reviewer
         self._stimulus_stager = stimulus_stager
         self._requirements = dict(requirements or {})
         self._contract = dict(contract or {})
+        if latch_rule not in ("checks", "consensus"):
+            raise ValueError(f"latch_rule must be 'checks' or 'consensus', not {latch_rule!r}")
+        if latch_rule == "consensus" and latch_gate is None:
+            raise ValueError("latch_rule='consensus' needs a latch_gate")
+        self._latch_rule = latch_rule
+        self._latch_gate = latch_gate
+        self._full_view = bool(full_view)
         self.max_trials = int(max_trials)
         self._memory_window = int(memory_window)
         # Consecutive outer-loop rounds with no mismatch-count reduction before
@@ -2454,6 +2614,8 @@ class RTLEditor:
         toolkit.register_tool_function(self._tool_focus)
         toolkit.register_tool_function(self._tool_list_suspect_blocks)
         toolkit.register_tool_function(self._tool_read_block)
+        if self._full_view:
+            toolkit.register_tool_function(self._tool_read_design)
         toolkit.register_tool_function(self._tool_find_signal)
         # The STAGING surface. Edits are free and latch nothing; `commit` is the
         # trial. Without these registered the staged buffer is unreachable --
@@ -2521,6 +2683,12 @@ class RTLEditor:
         if self._session is None:
             return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
         return ToolResponse(content=[{"type": "text", "text": self._session.read_block(block_id)}])
+
+    async def _tool_read_design(self) -> ToolResponse:
+        """The WHOLE design as staged, with line numbers. Free."""
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        return ToolResponse(content=[{"type": "text", "text": _numbered(self._session.staged())}])
 
     async def _tool_find_signal(self, name: str) -> ToolResponse:
         """Where a SIGNAL is driven and read, by name. Free.
@@ -2784,6 +2952,10 @@ class RTLEditor:
         if checks_only:
             self._session.count_noun = "failing check instances"
             self._session.gradient_noun = "failing check instances"
+        self._session.latch_rule = self._latch_rule
+        self._session.latch_gate = self._latch_gate
+        if self._latch_rule == "consensus":
+            self._session.accepted_agreement = self._latch_gate.agreement(self._session.read_rtl())
         # The caller has ALREADY run the reviewer once -- that is where
         # `sim_failed_log` and `sim_mismatch_cnt` came from. Without this the
         # requirement surface stays empty until the agent's first commit, so
@@ -2958,11 +3130,17 @@ class RTLEditor:
             + format_failing_scenarios(scenarios) + "\n</failing_scenarios>\n\n"
             if scenarios else ""
         )
+        order_prompt = workflow_prompt(checks_only, full_view=self._full_view,
+                                       latch_rule=self._latch_rule)
+        if self._full_view:
+            init += ("\n<rtl_design>\nThe WHOLE design as accepted now, line-numbered. Read every "
+                     "reader of a signal before you change it.\n"
+                     + _numbered(self._session.read_rtl()) + "\n</rtl_design>\n")
         first_prompt = (
             f"{init}\n\n{contradiction_block}{evidence_block}{passthrough_block}{skew_block}{latency_block}{scenarios_block}"
             f"<trace_report_json>\n{json.dumps(report, indent=2, ensure_ascii=False)}\n</trace_report_json>\n\n"
             f"{boolean_hint}\n{asserter_hint}\n"
-            f"{EXTRA_ORDER_PROMPT_CHECKS if checks_only else EXTRA_ORDER_PROMPT}\n\n"
+            f"{order_prompt}\n\n"
             "Start by calling list_suspect_blocks(), then read_block(block_id) for the most relevant one, "
             "then apply one replace_block(block_id, new_code), then run_simulation()."
         )
@@ -2978,8 +3156,14 @@ class RTLEditor:
         # rolled-back action or a round where the model never acts both leave
         # it unchanged, so this naturally catches both failure modes).
         stall_count = 0
+        #: Under the consensus latch progress is agreement, not the mismatch count; the counter
+        #: compares integers and wants them falling, so it gets the agreement negated.
+        def _progress(v):
+            return None if v is None else -int(round(1e6 * float(v)))
+
+        consensus_latch = self._latch_rule == "consensus"
         _stall = _StallCounter(
-            int(sim_mismatch_cnt),
+            _progress(self._session.accepted_agreement) or 0 if consensus_latch else int(sim_mismatch_cnt),
             spent=int(getattr(self._session, "action_calls", 0) or 0),
         )
 
@@ -2988,8 +3172,10 @@ class RTLEditor:
             nonlocal stall_count
             _stall.observe(
                 spent=int(getattr(self._session, "action_calls", 0) or 0),
-                last=self._session.last_mismatch_cnt,
-                best=self._session.best_mismatch_cnt,
+                last=(_progress(self._session.accepted_agreement) or 0) if consensus_latch
+                else self._session.last_mismatch_cnt,
+                best=_progress(self._session.best_agreement) if consensus_latch
+                else self._session.best_mismatch_cnt,
             )
             stall_count = _stall.count
 

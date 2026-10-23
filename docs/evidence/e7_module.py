@@ -2,7 +2,7 @@
 
     e7_module.py <runs-root> <module> [--trials N] [--rounds R] [--rtl START.sv]
                  [--skip-editor | --editor-only] [--tag NAME]
-                 [--feedback checks|model]
+                 [--feedback checks|model] [--latch checks|consensus --peer PEER.sv ...] [--full-view]
 
 Reads `<runs-root>/<module>` (the run) and `<runs-root>/corpora/<module>-ok`
 (the corpus `e6_autorun.py` packed), writes `<runs-root>/results/<module>/`:
@@ -79,7 +79,7 @@ def _step(name: str, argv: list[str], log: Path) -> bool:
 def main() -> int:
     pos = [a for a in sys.argv[1:] if not a.startswith("--")
            and sys.argv[sys.argv.index(a) - 1] not in ("--trials", "--rounds", "--rtl", "--tag",
-                                                       "--feedback")]
+                                                       "--feedback", "--latch", "--peer")]
     if len(pos) < 2:
         print(__doc__.strip().splitlines()[2])
         return 2
@@ -121,6 +121,11 @@ def main() -> int:
                                  #: (a run cut short by a provider error, with its remaining budget).
                                  *(["--rtl", _opt("--rtl")] if _opt("--rtl") else []),
                                  *(["--feedback", _opt("--feedback")] if _opt("--feedback") else []),
+                                 #: `--latch consensus --peer X ...` and `--full-view`: see e7_rtl_editor.py
+                                 *(["--latch", _opt("--latch")] if _opt("--latch") else []),
+                                 *[a for i, x in enumerate(sys.argv[:-1]) if x == "--peer"
+                                   for a in ("--peer", sys.argv[i + 1])],
+                                 *(["--full-view"] if "--full-view" in sys.argv else []),
                                  *[a for e in extras for a in ("--extra", e)],
                                  *([a for d in (task, task.parent) for a in ("--include", str(d))]
                                    if extras else []),

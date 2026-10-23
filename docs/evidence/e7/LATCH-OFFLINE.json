@@ -41,15 +41,15 @@
    "dpass": 0,
    "broken": 1,
    "silenced": 0,
-   "tps_changed": 0,
-   "tps_changed_outside": 0,
+   "tps_changed": 132,
+   "tps_changed_outside": 124,
    "targeted_tps": 18,
-   "dcons": 0.0,
-   "dref": 0.0,
-   "golden_net": 0,
-   "golden_net_own": 0,
-   "dedge": 0.0,
-   "dedge_own": 0.0
+   "dcons": 0.03568191453591215,
+   "dref": -0.01217051883689313,
+   "golden_net": 9604,
+   "golden_net_own": 1432,
+   "dedge": 0.0019777845663518367,
+   "dedge_own": -2.1928862769166058e-05
   },
   {
    "job": "bit_ctrl luna12",
@@ -58,15 +58,15 @@
    "dpass": -9,
    "broken": 12,
    "silenced": 0,
-   "tps_changed": 0,
-   "tps_changed_outside": 0,
+   "tps_changed": 136,
+   "tps_changed_outside": 127,
    "targeted_tps": 18,
-   "dcons": 0.0,
-   "dref": 0.0,
-   "golden_net": 0,
-   "golden_net_own": 0,
-   "dedge": 0.0,
-   "dedge_own": 0.0
+   "dcons": 0.034369837580223085,
+   "dref": -0.01396868558396569,
+   "golden_net": 8376,
+   "golden_net_own": 1074,
+   "dedge": 0.0019746352278703916,
+   "dedge_own": -2.1928862769166058e-05
   },
   {
    "job": "bit_ctrl luna12",
@@ -228,15 +228,15 @@
    "dpass": -3,
    "broken": 4,
    "silenced": 0,
-   "tps_changed": 19,
-   "tps_changed_outside": 19,
+   "tps_changed": 38,
+   "tps_changed_outside": 38,
    "targeted_tps": 7,
-   "dcons": -0.00559916962706312,
-   "dref": -0.005295820358756198,
-   "golden_net": 528,
-   "golden_net_own": 280,
-   "dedge": 0.0005700302651427958,
-   "dedge_own": -0.0005043638436910691
+   "dcons": 0.006955104308290568,
+   "dref": 0.005262927064602407,
+   "golden_net": -9078,
+   "golden_net_own": -1424,
+   "dedge": -0.011756480551260218,
+   "dedge_own": -0.01139204420858736
   },
   {
    "job": "bit_ctrl luna12",
@@ -1329,15 +1329,15 @@
    "accepted": 17,
    "acc_better": 6,
    "acc_worse": 10,
-   "rej_better": 19,
-   "rej_worse": 18,
-   "p": 0.3869303056880353,
+   "rej_better": 20,
+   "rej_worse": 19,
+   "p": 0.389224418597922,
    "own": [
     7,
     9,
-    16,
-    18,
-    1.0
+    17,
+    19,
+    0.9999999999999999
    ],
    "gains": 3.6768213806067984,
    "losses": -64.4561619581764
@@ -1346,14 +1346,14 @@
    "accepted": 1,
    "acc_better": 0,
    "acc_worse": 0,
-   "rej_better": 25,
-   "rej_worse": 28,
+   "rej_better": 26,
+   "rej_worse": 29,
    "p": 1.0,
    "own": [
     0,
     0,
-    23,
-    27,
+    24,
+    28,
     1.0
    ],
    "gains": 0,
@@ -1363,15 +1363,15 @@
    "accepted": 9,
    "acc_better": 2,
    "acc_worse": 6,
-   "rej_better": 23,
-   "rej_worse": 22,
-   "p": 0.2563581835785298,
+   "rej_better": 24,
+   "rej_worse": 23,
+   "p": 0.25737059832509335,
    "own": [
     2,
     6,
-    21,
-    21,
-    0.26091044037605143
+    22,
+    22,
+    0.26152690863579475
    ],
    "gains": 1.5092987626817989,
    "losses": -62.517156281829614
@@ -1380,15 +1380,15 @@
    "accepted": 6,
    "acc_better": 3,
    "acc_worse": 2,
-   "rej_better": 22,
-   "rej_worse": 26,
-   "p": 0.6575233867131758,
+   "rej_better": 23,
+   "rej_worse": 27,
+   "p": 0.6586284599603135,
    "own": [
     3,
     2,
-    20,
-    25,
-    0.6507273122014763
+    21,
+    26,
+    0.6521008403361346
    ],
    "gains": 2.102429045915233,
    "losses": -0.0012597353925808408
@@ -1397,15 +1397,15 @@
    "accepted": 10,
    "acc_better": 2,
    "acc_worse": 7,
-   "rej_better": 23,
-   "rej_worse": 21,
-   "p": 0.14754291921505655,
+   "rej_better": 24,
+   "rej_worse": 22,
+   "p": 0.14852184441529612,
    "own": [
     2,
     7,
+    22,
     21,
-    20,
-    0.15188025729836716
+    0.15249061326658325
    ],
    "gains": 0.788477712363328,
    "losses": -60.4440387337835
@@ -1414,58 +1414,75 @@
    "accepted": 1,
    "acc_better": 0,
    "acc_worse": 0,
-   "rej_better": 25,
-   "rej_worse": 28,
+   "rej_better": 26,
+   "rej_worse": 29,
    "p": 1.0,
    "own": [
     0,
     0,
-    23,
-    27,
+    24,
+    28,
     1.0
    ],
    "gains": 0,
    "losses": 0
   },
   "CONSENSUS-ONLY": {
-   "accepted": 23,
-   "acc_better": 16,
-   "acc_worse": 7,
-   "rej_better": 9,
+   "accepted": 26,
+   "acc_better": 18,
+   "acc_worse": 8,
+   "rej_better": 8,
    "rej_worse": 21,
-   "p": 0.005886391366858761,
+   "p": 0.002938392350306335,
    "own": [
-    13,
-    10,
-    10,
+    15,
+    11,
+    9,
     17,
-    0.25518674813145176
+    0.16370681443429688
    ],
-   "gains": 8.402994923911963,
-   "losses": -0.931396155400846
+   "gains": 8.798236903334185,
+   "losses": -2.1070442105268676
+  },
+  "CONSENSUS + passing does not fall": {
+   "accepted": 11,
+   "acc_better": 6,
+   "acc_worse": 5,
+   "rej_better": 20,
+   "rej_worse": 24,
+   "p": 0.7388559598869656,
+   "own": [
+    5,
+    6,
+    19,
+    22,
+    0.9999999999999999
+   ],
+   "gains": 4.635976547707979,
+   "losses": -0.0012597353925808408
   },
   "REF-ONLY": {
-   "accepted": 21,
+   "accepted": 22,
    "acc_better": 9,
-   "acc_worse": 12,
-   "rej_better": 16,
+   "acc_worse": 13,
+   "rej_better": 17,
    "rej_worse": 16,
-   "p": 0.7792549260488407,
+   "p": 0.5826112625637995,
    "own": [
     6,
-    15,
-    17,
+    16,
+    18,
     12,
-    0.04707795567566166
+    0.025962844536974318
    ],
    "gains": 11.186845409106041,
-   "losses": -70.31255989958977
+   "losses": -71.48820795471579
   }
  },
  "spearman": {
-  "dpass": -0.16665212948534808,
-  "out_neg": -0.002692705807302097,
-  "dcons": 0.5484921719949873,
-  "dref": -0.08090234527339422
+  "dpass": -0.1413924160274158,
+  "out_neg": -0.01291767305752276,
+  "dcons": 0.5669324791448443,
+  "dref": -0.11834375792804715
  }
 }

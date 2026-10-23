@@ -3,6 +3,7 @@
     e7_rtl_editor.py <run-dir> <out-dir> --spec <description.txt>
                      [--trials N] [--rounds R] [--rtl START.v] [--summary OUT.json]
                      [--feedback checks|model] [--extra CHILD.v ...] [--include DIR ...]
+                     [--latch checks|consensus --peer PEER.sv ...] [--full-view]
 
 `e6_rtl_debug.py` generalised to any module. What it does, and nothing else:
 
@@ -37,6 +38,13 @@ They go to the generator's lint gate, the suite's build and the editor's lint,
 and to nothing else. Without them the generator's gate rejected a design that
 instantiated its child as specified ("Cannot find file containing module"), and
 the retry pushed it to write a stand-in child: i2c_master_byte_ctrl, 14 of 14.
+
+**WHAT KEEPS A COMMIT.** `--latch checks` (the default): passing shipped requirements rise.
+`--latch consensus`: the design's agreement with `--peer` designs, generated independently from
+the same specification, rises on the run's own stimulus (`eda_agent/consensus_gate.py`). Audited
+against golden commit by commit, the first is unrelated in direction to golden and the second
+tracks it (docs/evidence/e7/FEEDBACK-AUDIT.md, LATCH-OFFLINE.md). The peers are simulated, never
+shown to the editor. `--full-view` gives the editor the whole design and lets it edit anywhere.
 """
 from __future__ import annotations
 
@@ -67,7 +75,7 @@ def _opt(name, default=None):
 args = [a for a in sys.argv[1:] if not a.startswith("--")
         and sys.argv[sys.argv.index(a) - 1] not in
         ("--spec", "--trials", "--rounds", "--rtl", "--summary", "--feedback",
-         "--extra", "--include")]
+         "--extra", "--include", "--latch", "--peer")]
 if len(args) < 2 or not _opt("--spec"):
     print(__doc__.strip().splitlines()[2])
     raise SystemExit(2)
@@ -80,6 +88,12 @@ SUMMARY = Path(_opt("--summary", str(OUT / "editor_summary.json")))
 FEEDBACK = _opt("--feedback", "checks")
 EXTRA = [sys.argv[i + 1] for i, a in enumerate(sys.argv[:-1]) if a == "--extra"]
 INCLUDE = [sys.argv[i + 1] for i, a in enumerate(sys.argv[:-1]) if a == "--include"]
+LATCH = _opt("--latch", "checks")
+PEERS = [sys.argv[i + 1] for i, a in enumerate(sys.argv[:-1]) if a == "--peer"]
+FULL_VIEW = "--full-view" in sys.argv
+if LATCH not in ("checks", "consensus") or (LATCH == "consensus" and not PEERS):
+    print("--latch must be checks or consensus, and consensus needs at least one --peer")
+    raise SystemExit(2)
 if FEEDBACK not in SpecflowReviewer.FEEDBACK:
     print(f"--feedback must be one of {SpecflowReviewer.FEEDBACK}")
     raise SystemExit(2)
@@ -174,6 +188,16 @@ tb_text = describe_oracle(
     testplan=json.loads((OUT / "specflow" / "testplan.json").read_text()),
     max_chars=12000) if FEEDBACK == "model" else None
 history: list[dict] = []
+gate = None
+if LATCH == "consensus":
+    from eda_agent.consensus_gate import ConsensusGate  # noqa: E402
+
+    spec_dir = Path(_opt("--spec")).resolve().parent
+    gate = ConsensusGate.from_run(OUT, [Path(p).read_text(encoding="utf-8") for p in PEERS],
+                                  include_dirs=[*INCLUDE, str(spec_dir), str(spec_dir.parent)],
+                                  extra_sources=EXTRA, workdir=OUT / "consensus_gate")
+    print(f"consensus latch: {len(gate.peers)} of {len(PEERS)} peer(s) simulated on "
+          f"{len(gate.tps)} testpoint(s)", flush=True)
 
 
 def _tally(rnd: int, failing: int) -> dict:
@@ -188,6 +212,8 @@ def _tally(rnd: int, failing: int) -> dict:
            "failing": bad, "abstaining": quiet,
            "rtl_lines": len(rtl_path.read_text().splitlines())
            if rtl_path.is_file() else 0}
+    if gate is not None and rtl_path.is_file():
+        row["agreement"] = gate.agreement(rtl_path.read_text())
     history.append(row)
     print(f"\nROUND {rnd}: {row['pass']} pass, {row['fail']} FAIL, "
           f"{row['abstain']} abstain of {row['requirements']} requirement(s); "
@@ -227,7 +253,8 @@ async def _drive() -> None:
         editor = RTLEditor(cfg, sim_reviewer=reviewer, max_trials=remaining,
                            stimulus_stager=stager,
                            requirements=load_requirement_views(OUT, contract),
-                           contract=contract)
+                           contract=contract, latch_rule=LATCH, latch_gate=gate,
+                           full_view=FULL_VIEW)
         _, repaired, used, _ = await editor.chat(
             spec=spec, output_dir_per_run=str(OUT), sim_failed_log=sim_output,
             sim_mismatch_cnt=failing, contract_json=contract_json,
@@ -254,6 +281,7 @@ SUMMARY.write_text(json.dumps({
     "run": str(RUN), "module": top, "bodies": len(oracles),
     "requirements": n_req, "set": "shipped" if shipped else "oracles",
     "trials": TRIALS, "rounds": ROUNDS, "feedback": FEEDBACK,
+    "latch": LATCH, "peers": PEERS, "full_view": FULL_VIEW,
     "extra_sources": EXTRA, "include_dirs": INCLUDE,
     "seconds": round(time.time() - t0),
     "history": history, "final": history[-1] if history else None,

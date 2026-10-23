@@ -13,10 +13,13 @@ scored against golden. Each score is set beside what the editor was told. Figure
 - **Sources:** the session's trajectory and editor log give every staged edit and every commit's
   verdict.
 - **Edits are applied with the editor's own splice.** A replaced block's prior text is recovered
-  from the recorded diff and checked by recomputing that diff.
-- **Coverage:** 8 jobs, 74 commits. Each replay reproduces the RTL its job delivered. Every
-  submitted design is reconstructed exactly: 5 bit_ctrl edits did not resolve, but all sat in
-  batches the editor discarded before committing.
+  from the recorded diff, or from the editor's own `read_block`, `focus` and `list_suspect_blocks`
+  output when the trajectory truncated that diff. Each recovery is checked by recomputing the diff.
+- **Coverage:** 8 jobs, 74 commits. Each replay reproduces the RTL its job delivered, and every
+  edit resolves.
+- **Correction:** an earlier version of this audit miscounted two bit_ctrl commits as exactly
+  replayed. They had been scored as changing no output; both in fact changed outputs and broke
+  something. The figures below include them.
 - **Excluded jobs:**
   - luna13 byte_ctrl: its trajectory holds only the last of six launches;
   - luna12 dc_fsm: its logs were lost.
@@ -37,15 +40,15 @@ shipped checks see.
    better than chance.**
    - The replay reproduces every final, so the editor was judged on what it submitted.
    - Commits whose passing count rose were net worse by golden 9 times and net better 6 times.
-   - Commits whose passing count fell were net better 15 times and net worse 10.
-   - No association: Fisher p = 0.33. On the run's own stimulus, p = 1.00.
+   - Commits whose passing count fell were net better 15 times and net worse 11.
+   - No association: Fisher p = 0.34. On the run's own stimulus, p = 1.00.
 2. **Almost every commit that changes behaviour breaks something.**
-   - 51 of the 53 commits that changed any output broke a cell that was right.
-   - In mixed commits, breaks are a median 48% of the changed cells (IQR 35–73%).
+   - 53 of the 55 commits that changed any output broke a cell that was right.
+   - In mixed commits, breaks are a median 48% of the changed cells (IQR 31–78%).
    - Only 2 commits were clean improvements, and both were rejected (+0.01 points of edges).
 3. **When a commit breaks a part that was right, the feedback rarely says where.**
-   - In 39 of the 51 breaking commits the editor was told some requirement BROKE. But the checks of
-     the requirements it was told about read the broken outputs for only 34% of the broken cells.
+   - In 41 of the 53 breaking commits the editor was told some requirement BROKE. But the checks of
+     the requirements it was told about read the broken outputs for only 35% of the broken cells.
    - In the other 12 it was told nothing broke.
    - **A breaking commit still latches if passing rises on net.** 16 did. In those, 92% of the
      broken cells were on outputs no reported requirement reads, and 8 of the 16 reported nothing
@@ -56,25 +59,25 @@ shipped checks see.
    | | gains | losses |
    |---|---|---|
    | accepted | +3.7 | −64.5 |
-   | rejected | +12.4 | −324.8 |
+   | rejected | +12.8 | −326.0 |
 
    - **Most of the rejected loss is sb's:** −200 points on luna13 and −100 on luna14. On luna13
      the `find_signal` defect led the session to delete live code, and the gate rejected those
      commits.
    - **Most of the accepted loss is sb luna14's** configuration line.
    - **Without sb,** accepted gains and losses nearly cancel: +3.7 against −2.8. The gate
-     rejected +12.4 of gains, over three times what it accepted, and −25.0 of losses.
+     rejected +12.8 of gains, over three times what it accepted, and −26.2 of losses.
 
 ## 1. What golden says each commit did
 
 | golden's view | latched | not latched | mean change in edges equal, latched / not (points) |
 |---|---|---|---|
 | clean improvement (fixed, nothing broken) | 0 | 2 | — / +0.01 |
-| mixed (fixed and broken) | 14 | 31 | +0.06 / −0.41 |
+| mixed (fixed and broken) | 14 | 33 | +0.06 / −0.41 |
 | regression (broken, nothing fixed) | 2 | 4 | −30.8 / −75.0 |
-| unchanged (no output changed) | 1 | 19 | 0 / 0 |
+| unchanged (no output changed) | 1 | 17 | 0 / 0 |
 
-Of the 45 mixed commits, 23 are net positive and 22 net negative. The gate latched 6 of the
+Of the 47 mixed commits, 24 are net positive and 23 net negative. The gate latched 6 of the
 positive ones and 8 of the negative ones.
 
 ## 2. Did the feedback point the same way as golden?
@@ -82,21 +85,21 @@ positive ones and 8 of the negative ones.
 | passing requirements | golden net better | golden net worse | golden unchanged |
 |---|---|---|---|
 | rose (16) | 6 | 9 | 1 |
-| unchanged (29) | 4 | 9 | 16 |
-| fell (28) | 15 | 10 | 3 |
+| unchanged (29) | 5 | 9 | 15 |
+| fell (28) | 15 | 11 | 2 |
 
 Judged on the run's own stimulus only, the counts are similar:
 - rose: 7 better, 8 worse;
-- fell: 13 better, 12 worse;
+- fell: 13 better, 13 worse;
 - p = 1.00.
 
 Judged by edges equal to golden, counting changes of at least 0.05 points:
 - rose: 5 better, 6 worse;
-- fell: 10 better, 9 worse.
+- fell: 10 better, 10 worse.
 
 | module | commits | passing rose → golden better : worse | passing fell → better : worse |
 |---|---|---|---|
-| bit_ctrl | 18 | 1 : 3 | 6 : 1 |
+| bit_ctrl | 18 | 1 : 3 | 6 : 2 |
 | byte_ctrl | 39 | 3 : 3 | 9 : 7 |
 | dc_fsm | 3 | 2 : 1 | — |
 | sb | 13 | 0 : 2 | 0 : 2 |
@@ -105,7 +108,7 @@ Judged by edges equal to golden, counting changes of at least 0.05 points:
 
 | job | commits | latched | latched: clean / mixed net+ / mixed net− / regressions / unchanged | rejected: clean / mixed net+ / mixed net− / regressions / unchanged |
 |---|---|---|---|---|
-| bit_ctrl luna12 | 18 | 4 | 0 / 1 / 3 / 0 / 0 | 0 / 8 / 1 / 0 / 5 |
+| bit_ctrl luna12 | 18 | 4 | 0 / 1 / 3 / 0 / 0 | 0 / 9 / 2 / 0 / 3 |
 | byte_ctrl luna12 | 20 | 5 | 0 / 2 / 2 / 0 / 1 | 2 / 4 / 5 / 0 / 4 |
 | byte_ctrl luna14 | 19 | 3 | 0 / 1 / 2 / 0 / 0 | 0 / 5 / 8 / 1 / 2 |
 | dc_fsm luna13 | 1 | 1 | 0 / 1 / 0 / 0 / 0 | — |
@@ -117,13 +120,13 @@ Judged by edges equal to golden, counting changes of at least 0.05 points:
 ## What this says about the editor's position
 
 - **The gate is not a regression check.** Its notion of "broke" is a requirement changing verdict.
-  The requirement that changes is usually not where the damage is: 34% of broken cells are on an
+  The requirement that changes is usually not where the damage is: 35% of broken cells are on an
   output it reads. So even when the editor is told something broke, it is not told what.
 - **The editor cannot use the feedback to tell good edits from bad ones.** The direction of the
   verdict is unrelated to golden's, so the edits that latch are close to a random choice among
   those submitted, as far as behaviour goes. That fits the near-zero net effect of repair in
   `CHECKS-VS-ABLATION-ROBUST.md`.
-- **The edits are rarely clean.** 2 of 53 behaviour-changing submissions were pure improvements.
+- **The edits are rarely clean.** 2 of 55 behaviour-changing submissions were pure improvements.
   This is golden's judgement of the edits, independent of the gate. But these are edits made to
   satisfy the checks, so this data cannot separate the quality of the edits from the quality of
   their targets. `REPAIR-ANATOMY.md` and the proposed ablations address that.

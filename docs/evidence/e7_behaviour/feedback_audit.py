@@ -128,75 +128,121 @@ def reverse_patch(after, recorded):
     return "".join(out)
 
 
-def block_before(sh, bid, new_code, recorded):
-    if recorded:
+TRUNC = 4000  #: the trajectory keeps the first 4000 characters of a diff (`_record_trajectory`)
+#: Actions the trajectory records; everything else appears only in the editor log.
+TRAJ = {"run_simulation", "replace_block", "add_block", "edit", "remove_block", "check_staged",
+        "discard_staged", "commit", "focus", "add_stimulus"}
+
+
+def _variants(t):
+    return [t, t.rstrip("\n"), t.rstrip("\n") + "\n"] if t else []
+
+
+def block_before(sh, bid, new_code, recorded, seen):
+    """The block's text before `replace_block`: the candidate whose diff to `new_code` is the one recorded.
+
+    Candidates, in order: the recorded diff reversed onto the new code; the block's own staged text;
+    what the latest `read_block` of it showed; its span in the latest `focus` / `list_suspect_blocks`;
+    every block the editor's parser finds. A diff the trajectory truncated is matched on its prefix.
+    """
+    def ok(c):
+        u = udiff(c, new_code, bid)
+        return u == recorded or (len(recorded) >= TRUNC and u[:TRUNC] == recorded[:TRUNC])
+    if recorded and len(recorded) < TRUNC:
         b = reverse_patch(new_code, recorded)
         if udiff(b, new_code, bid) == recorded:
             return b
     cands = []
     if bid in sh.staged_text:
         cands.append(sh.staged_text[bid])
+    for src in ("read", "span"):
+        cands += _variants(seen.get((src, bid)))
     for text in (sh.staged(), sh.read_rtl()):
         cands += [b.code for b in parse_rtl_blocks(text) if b.id == bid]
         cands += [b.code for b in parse_rtl_blocks(text)]
-    for c in cands:
-        if udiff(c, new_code, bid) == recorded:
-            return c
-    return None
+    return next((c for c in cands if c and ok(c)), None)
 
 
 def replay(start, traj, calls, results):
-    """-> (submitted designs with their verdicts, final accepted RTL, unresolved edits)."""
+    """-> (submitted designs with their verdicts, final accepted RTL, unresolved edits).
+
+    Walks the editor log's tool calls in order. Calls the trajectory also records consume its
+    next record (edit success, diffs, session boundaries); `read_block`, `focus` and
+    `list_suspect_blocks` results are kept as candidate block texts.
+    """
     sh = Shim(start)
-    ci = {t: [c for tt, c in calls if tt == t] for t in ("replace_block", "edit")}
-    cr = [r for t, r in results if t == "commit"]
-    k = {"replace_block": 0, "edit": 0, "commit": 0}
+    res_of = {}
+    for t, r in results:
+        res_of.setdefault(t, []).append(r)
+    used = {}
+    tq = [r for r in traj if r["action"] != "model_turn"]
+    ti = 0
+    seen = {}
     commits, miss = [], 0
     batch_miss = 0  # unresolved edits in the batch now staged
     prev_iter = 0
-    for r in traj:
+    for tool, call in calls:
+        k = used.get(tool, 0)
+        used[tool] = k + 1
+        res = (res_of.get(tool) or [None] * (k + 1))[k] if k < len(res_of.get(tool, [])) else None
+        inp = call.get("input") or {}
+        if tool == "read_block":
+            o = res["output"][0] if res and isinstance(res.get("output"), list) else (res or {}).get("output")
+            txt = (o or {}).get("text", "") if isinstance(o, dict) else ""
+            if re.match(r"\s*\d+: ", txt):
+                seen[("read", inp.get("block_id"))] = "\n".join(re.sub(r"^\s*\d+: ?", "", ln) for ln in txt.split("\n"))
+            continue
+        if tool in ("focus", "list_suspect_blocks"):
+            j = result_json(res) if res else {}
+            buf = (sh.staged() if tool == "focus" else sh.read_rtl()).split("\n")
+            for b in j.get("suspect_blocks") or []:
+                if isinstance(b, dict) and b.get("start_line") and b.get("end_line"):
+                    seen[("span", b.get("id"))] = "\n".join(buf[b["start_line"] - 1:b["end_line"]])
+        if tool not in TRAJ:
+            continue
+        r = tq[ti]
+        ti += 1
+        if r["action"] != tool:
+            raise SystemExit(f"log and trajectory disagree at {tool} vs {r['action']}")
         if r["iter"] <= prev_iter:  # a new session (round) starts from the accepted RTL
             sh.staged_rtl, sh.staged_text, sh.retired_ids = None, {}, set()
             batch_miss = 0
-        m0 = miss
         prev_iter = r["iter"]
+        m0 = miss
         a = r["action"]
         if a in ("replace_block", "edit"):
-            inp = ci[a][k[a]]["input"]
-            k[a] += 1
             if not r["accepted"]:
                 continue
             if a == "edit":
-                res = sh._splice(inp["old_text"], inp["new_text"], "edit")
+                out = sh._splice(inp["old_text"], inp["new_text"], "edit")
             else:
-                before = block_before(sh, r["block_id"], inp["new_code"], r["diff"] or "")
+                before = block_before(sh, r["block_id"], inp["new_code"], r["diff"] or "", seen)
                 if before is None:
                     miss += 1
+                    batch_miss += 1
                     continue
-                res = sh._splice(before, inp["new_code"].rstrip("\n"), "replace")
-                if res.get("is_action_executed"):
+                out = sh._splice(before, inp["new_code"].rstrip("\n"), "replace")
+                if out.get("is_action_executed"):
                     sh.staged_text[r["block_id"]] = inp["new_code"].rstrip("\n")
-            miss += not res.get("is_action_executed")
+            miss += not out.get("is_action_executed")
         elif a == "remove_block" and r["accepted"]:
-            res = sh._splice(r["diff"] or "", "", "remove")
-            miss += not res.get("is_action_executed")
+            out = sh._splice(r["diff"] or "", "", "remove")
+            miss += not out.get("is_action_executed")
             sh.retired_ids.add(r["block_id"])
         elif a == "add_block" and r["accepted"]:
             body = (r["diff"] or "").rstrip("\n")
             if r["block_id"] == "endmodule":
                 sh.staged_rtl = sh.staged().replace("endmodule", body + "\n\nendmodule", 1)
             else:
-                anchor = sh.staged_text.get(r["block_id"]) or next(
-                    (b.code for b in parse_rtl_blocks(sh.staged()) if b.id == r["block_id"]), None)
-                res = sh._splice(anchor, anchor + "\n\n" + body, "add") if anchor else {}
-                miss += not res.get("is_action_executed")
+                anchor = (sh.staged_text.get(r["block_id"]) or seen.get(("read", r["block_id"]))
+                          or next((b.code for b in parse_rtl_blocks(sh.staged()) if b.id == r["block_id"]), None))
+                out = sh._splice(anchor, anchor + "\n\n" + body, "add") if anchor else {}
+                miss += not out.get("is_action_executed")
         elif a == "discard_staged":
             sh.staged_rtl, sh.staged_text, sh.retired_ids = None, {}, set()
             batch_miss = 0
         elif a == "commit":
-            res = cr[k["commit"]]
-            k["commit"] += 1
-            j = result_json(res)
+            j = result_json(res) if res else {}
             reason = (j.get("accept_reason") or "") + " " + (j.get("error_msg") or "")
             latched = bool(j.get("is_action_executed")) and "LATCHED" in reason
             commits.append({"before": sh.read_rtl(), "submitted": sh.staged(), "latched": latched,
@@ -312,7 +358,11 @@ for traj_f in sorted(glob.glob(str(RUNS / "luna1*" / f"editor-{ARM}" / "*" / "de
              else (E / run / "editor" / mod / "rtl_generated.sv")).read_text()
     commits, final, miss = replay(start, traj, log_records(text, "input"), log_records(text, "output"))
     delivered = (E / run / f"editor-{ARM}" / mod / "rtl.sv").read_text()
-    ok = norm(final) == norm(delivered)
+    # The session hands back its best design, ranked on passing requirements, which a later
+    # gradient latch (passing held) does not displace: the delivered design is then an EARLIER
+    # accepted state.
+    accepted = [final] + [c["submitted"] for c in commits if c["latched"]]
+    ok = any(norm(a) == norm(delivered) for a in accepted)
     print(f"{SH[mod]} {run}: {len(commits)} commits replayed, {miss} edits unresolved, "
           f"final {'REPRODUCED' if ok else 'DIFFERS'}", flush=True)
     if not ok:
