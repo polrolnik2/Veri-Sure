@@ -1572,7 +1572,12 @@ class _EditSession:
                           "the stimulus never reaches. Change what the outputs do, or try "
                           "something else.")
         n = consensus.get("peers") or 0
-        if consensus.get("rises"):
+        tol = float(consensus.get("tolerance") or 0.0)
+        dpass = (len(req_after[0]) - len(req_before[0])
+                 if req_before is not None and req_after is not None else 0)
+        within = (not consensus.get("rises") and dpass > 0 and a0 is not None and a1 is not None
+                  and a1 > a0 - tol)
+        if consensus.get("rises") or within:
             self.last_mismatch_cnt = sim_mismatch_cnt
             if new_fail_time is not None:
                 self.last_fail_time = int(new_fail_time)
@@ -1580,9 +1585,15 @@ class _EditSession:
             if req_after is not None:
                 self._accepted_req_split = req_after
             result["accept_reason"] = (
-                f"LATCHED ON AGREEMENT: the design now agrees with the {n} independently generated "
-                f"designs on {pct(a1)} of edges (was {pct(a0)}).{req_note}{away_note}")
+                (f"LATCHED ON AGREEMENT: the design now agrees with the {n} independently generated "
+                 f"designs on {pct(a1)} of edges (was {pct(a0)}).") if consensus.get("rises") else
+                (f"LATCHED ON THE CHECKS, WITHIN TOLERANCE: passing requirements rose and agreement "
+                 f"with the {n} independently generated designs fell by less than "
+                 f"{100 * tol:.1f} points ({pct(a0)} -> {pct(a1)}).")) + f"{req_note}{away_note}"
             self.accepted_agreement = a1
+            self.best_rtl, self.best_agreement = self.read_rtl(), a1
+            if req_after is not None:
+                self.best_passing = len(req_after[0])
             if is_sim_pass and sim_mismatch_cnt == 0:
                 self.is_done = True
             else:
@@ -1617,8 +1628,9 @@ class _EditSession:
                           f"small is as often a new defect as a fix.")
         result["error_msg"] = (
             f"Commit did NOT latch: agreement with the {n} independently generated designs went "
-            f"{pct(a0)} -> {pct(a1)} of edges, and a commit latches only when it RISES by at least "
-            f"{100 * margin:.1f} points. The "
+            f"{pct(a0)} -> {pct(a1)} of edges. A commit latches when agreement RISES by at least "
+            f"{100 * margin:.1f} points, or when passing requirements rise and agreement falls by "
+            f"less than {100 * tol:.1f} points. The "
             f"accepted RTL is unchanged and your staged edits are kept -- adjust them and commit "
             f"again.{req_note}{away_note}  A change that satisfies a check while moving outputs "
             f"away from every independent reading of the specification is more likely a new "
@@ -2204,10 +2216,12 @@ class _EditSession:
             self.note_best(prev_mismatch_cnt, old_file_content,
                            passing=len(req_before[0]) if req_before is not None else None,
                            agreement=consensus["before"] if consensus else None)
-        improved_best = self.note_best(
+        #: Under the consensus latch the best design is the last one LATCHED, set in
+        #: `_consensus_decision`: a commit kept within the tolerance has lower agreement than the
+        #: design before it, and ranking on agreement would hand that earlier design back.
+        improved_best = False if consensus is not None else self.note_best(
             sim_mismatch_cnt, self.read_rtl(),
-            passing=len(req_after[0]) if req_after is not None else None,
-            agreement=consensus["after"] if consensus else None)
+            passing=len(req_after[0]) if req_after is not None else None)
         result["best_mismatch_cnt"] = self.best_mismatch_cnt
 
         # THE ACCEPT CRITERION IS PASSING REQUIREMENTS, WHEN THERE ARE ANY.

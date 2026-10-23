@@ -98,15 +98,23 @@ class ConsensusGate:
     #: both arms (docs/evidence/e7/LATCH-OFFLINE.md), so it is a tuned value, not a tested one. The
     #: first live smoke run latched a +0.08-point rise that broke 1,565 output cells.
     MIN_GAIN = 0.001
+    #: **A SMALL LOSS THE CHECKS MAY BUY.** A commit that raises passing requirements latches if
+    #: agreement falls by less than this (0.005 = 0.5 points). Found live on dc_fsm luna14: 11
+    #: refused commits golden scores as real fixes (testpoints 70.9% -> 75.5%), each moving 0.02-0.85
+    #: points away from peers that share the defect it corrects. Offline, with it: checks arm
+    #: accepted 15 better : 3 worse (was 13 : 2), gains +8.7 (was +7.4), losses unchanged; model arm
+    #: 8 : 5 (was 7 : 4), gains +31.0 (was +29.8), losses unchanged. Tuned on the same data.
+    TOLERANCE = 0.005
 
     def __init__(self, *, contract: dict, rows_by_tp: dict[str, list[list[int | None]]],
                  peers: Iterable[str], include_dirs: Iterable[str] = (),
                  extra_sources: Iterable[str] = (), workdir: str | Path | None = None,
-                 min_gain: float | None = None):
+                 min_gain: float | None = None, tolerance: float | None = None):
         from specflow.ports import idle_values, inactive_value, is_reset
 
         self.contract = contract
         self.min_gain = self.MIN_GAIN if min_gain is None else float(min_gain)
+        self.tolerance = self.TOLERANCE if tolerance is None else float(tolerance)
         self.module = str(contract.get("module_name") or "TopModule")
         io = contract.get("io") or []
         self.clock = (contract.get("clocking") or {}).get("clock", {}).get("name")
@@ -210,6 +218,7 @@ class ConsensusGate:
                     fell.append((name, d))
         fell.sort(key=lambda kv: kv[1])
         return {"peers": len(self.peers), "before": a0, "after": a1, "min_gain": self.min_gain,
+                "tolerance": self.tolerance,
                 "rises": a0 is not None and a1 is not None and a1 >= a0 + self.min_gain - 1e-12
                 and a1 > a0 + 1e-12,
                 "outputs_moved_away": [n for n, _ in fell],

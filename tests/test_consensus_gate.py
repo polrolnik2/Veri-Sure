@@ -58,6 +58,7 @@ def test_a_rise_below_the_margin_does_not_latch(tmp_path):
     j = g.judge(counter(2), counter(1))
     assert j["after"] > j["before"] and not j["rises"]
     assert ConsensusGate.MIN_GAIN == pytest.approx(0.001)
+    assert ConsensusGate.TOLERANCE == pytest.approx(0.005) and j["tolerance"] == pytest.approx(0.005)
 
 
 def test_the_margin_is_named_when_a_small_rise_is_refused(tmp_path):
@@ -119,6 +120,36 @@ def test_a_commit_that_lowers_agreement_is_reverted_whatever_the_checks_say(tmp_
     assert "did NOT latch" in r["error_msg"] and "passing requirements 1 -> 2" in r["error_msg"]
     assert "moved AWAY" in r["error_msg"] and "q" in r["error_msg"]
     assert Path(s.rtl_path).read_text() == "old"
+
+
+def _judged(before, after, tol=0.005):
+    return {"peers": 3, "before": before, "after": after, "rises": after >= before + 0.001,
+            "outputs_moved_away": ["q"], "behaviour_changed": True, "min_gain": 0.001, "tolerance": tol}
+
+
+PASS_UP = ({"REQ-1"}, {"REQ-2"}, set()), ({"REQ-1", "REQ-2"}, set(), set())
+PASS_SAME = ({"REQ-1"}, {"REQ-2"}, set()), ({"REQ-1"}, {"REQ-2"}, set())
+
+
+def test_a_check_gain_buys_a_small_agreement_loss(tmp_path):
+    """dc_fsm luna14: real fixes moved 0.02-0.85 points away from peers sharing the defect."""
+    s = _session(tmp_path)
+    r = s._consensus_decision({}, _judged(0.9981, 0.9978), *PASS_UP, "old", 0, None, "{}", is_sim_pass=True)
+    assert r["is_action_executed"] and "WITHIN TOLERANCE" in r["accept_reason"]
+    assert s.best_rtl == "new" and s.best_agreement == pytest.approx(0.9978), "best is the last latched"
+
+
+def test_a_check_gain_does_not_buy_a_large_agreement_loss(tmp_path):
+    """sb luna14: the configuration line raised passing 28 -> 65 and dropped agreement 99% -> 38%."""
+    s = _session(tmp_path)
+    r = s._consensus_decision({}, _judged(0.9916, 0.3807), *PASS_UP, "old", 2, None, "{}")
+    assert not r.get("is_action_executed") and Path(s.rtl_path).read_text() == "old"
+
+
+def test_without_a_check_gain_a_small_loss_is_refused(tmp_path):
+    s = _session(tmp_path)
+    r = s._consensus_decision({}, _judged(0.9981, 0.9978), *PASS_SAME, "old", 2, None, "{}")
+    assert not r.get("is_action_executed")
 
 
 def test_a_batch_that_changes_no_output_is_told_so(tmp_path):
