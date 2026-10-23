@@ -209,4 +209,7 @@ class ConsensusGate:
                 and a1 > a0 + 1e-12,
                 "outputs_moved_away": [n for n, _ in fell],
                 #: False when no spec output differs on any edge: the batch cannot move agreement
-                "behaviour_changed": None if tb is None or ta is None else tb != ta}
+                "behaviour_changed": None if tb is None or ta is None else tb != ta,
+                #: what `after` does on the stimulus, as a hash: equal for designs that behave alike
+                "after_behaviour": None if ta is None else
+                hashlib.sha256(json.dumps(ta, sort_keys=True).encode()).hexdigest()[:16]}

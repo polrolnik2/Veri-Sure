@@ -129,6 +129,24 @@ def test_a_batch_that_changes_no_output_is_told_so(tmp_path):
     assert "changed NO spec output" in r["error_msg"]
 
 
+def test_resubmitting_a_refused_behaviour_is_named(tmp_path):
+    s = _session(tmp_path)
+    c = {"peers": 3, "before": 0.6, "after": 0.5, "rises": False, "outputs_moved_away": [],
+         "behaviour_changed": True, "min_gain": 0.001, "after_behaviour": "abc"}
+    first = s._consensus_decision({}, dict(c), None, None, "old", 2, None, "{}")
+    assert "EXACTLY like" not in first["error_msg"]
+    again = s._consensus_decision({}, dict(c), None, None, "old", 2, None, "{}")
+    assert "EXACTLY like the one refused" in again["error_msg"]
+
+
+@needs_iverilog
+def test_designs_that_behave_alike_share_a_fingerprint(gate):
+    a = gate.judge(counter(2), counter(1))["after_behaviour"]
+    b = gate.judge(counter(2), counter(1, "cnt") + "// a comment\n")["after_behaviour"]
+    assert a and a == b
+    assert gate.judge(counter(1), counter(2))["after_behaviour"] != a
+
+
 def test_best_is_ranked_on_agreement_under_the_consensus_latch(tmp_path):
     s = _session(tmp_path)
     assert s.note_best(5, "a", passing=10, agreement=0.5)

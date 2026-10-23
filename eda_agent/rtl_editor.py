@@ -636,6 +636,9 @@ class _EditSession:
     best_agreement: float | None = None
     #: The accepted design's agreement, for stall detection under the consensus latch.
     accepted_agreement: float | None = None
+    #: Behaviour fingerprints of refused commits -> the trial that refused them. Measured on the
+    #: third live smoke run: the editor resubmitted a batch behaving exactly like one just refused.
+    refused_behaviours: Dict[str, int] = field(default_factory=dict)
     #: Best (lowest) mismatch count seen this session, and the RTL that produced
     #: it. Recorded on every simulated edit regardless of accept/rollback, and
     #: restored before `chat()` returns -- so with the guard off the loop is
@@ -1586,6 +1589,13 @@ class _EditSession:
             result["trace_summary"] = self.trace_summary()
             return result
         self.write_rtl(old_file_content)
+        fp = consensus.get("after_behaviour")
+        if fp and fp in self.refused_behaviours:
+            away_note += (f"  This batch behaves EXACTLY like the one refused at trial "
+                          f"{self.refused_behaviours[fp]}: the same value on every output at every edge. "
+                          f"Resubmitting it cannot latch.")
+        elif fp:
+            self.refused_behaviours[fp] = int(self.action_calls)
         margin = consensus.get("min_gain") or 0.0
         if a0 is not None and a1 is not None and a0 < a1 < a0 + margin:
             away_note += (f"  It rose by less than the {100 * margin:.1f}-point margin: a change that "
