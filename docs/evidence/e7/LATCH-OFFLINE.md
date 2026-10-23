@@ -120,3 +120,40 @@ runner, `--latch consensus --peer A.sv --peer B.sv --peer C.sv`.
 - Both default off.
 - **Gate check:** on sb luna12's start, the gate reproduces this test's agreement exactly
   (0.860426).
+
+## Live iteration, small runs only
+
+Run at small scale to find errors, not to measure the effect. Four sessions were stopped about an
+hour into a full arm, followed by four smoke runs of 3 trials and 1 round, all with checks
+feedback, the consensus latch and `--full-view`. The analysis tool is
+`e7_behaviour/smoke_report.py`.
+
+| run | what happened | golden's view of the final |
+|---|---|---|
+| 4 stopped full-arm sessions (bit_ctrl luna12, byte_ctrl luna12–14) | 13 commits judged by the gate, no errors; 1 latched, 12 refused. 3 refused batches changed no output at all. | not scored (stopped) |
+| smoke 1: sb luna12 | latched a **+0.08-point** rise, which golden scores as a pure regression (1,565 cells broken) | 56.1% → 54.5% of edges |
+| smoke 2: dc_fsm luna13 | one commit, +0.17 points, latched | 90.3% → 90.5% edges, 79.0% → 82.8% testpoints (61 cells fixed, 6 broken) |
+| smoke 2: sb luna12 | the +0.08 rise refused by the new margin, then **shipped anyway** (bug below) | 54.5% |
+| smoke 3: sb luna12 | all 3 commits refused (one would have taken agreement from 86.0% to 50.6%) | unchanged, 56.1% |
+| smoke 4: byte_ctrl luna12 | 1 commit (passing 52 → 56, agreement 63.73% → 63.65%), refused | unchanged, 42.7% |
+
+**Defects found and fixed:**
+1. **A rise below 0.1 points latched** (smoke 1). Gains that small were a coin flip in the audited
+   commits on both arms, so `ConsensusGate.MIN_GAIN` = 0.001. This is tuned, not tested.
+2. **A refused design was shipped** (smoke 2). The best-design tracker ranked on raw agreement,
+   ignoring the margin, so `restore_best` returned the design the latch had just refused.
+   `note_best` now applies the margin. Confirmed in smoke 3.
+3. **Batches that change no output spent trials** (the stopped sessions). The refusal now says so.
+4. **A batch behaving exactly like one already refused was resubmitted** (smoke 3). The gate
+   fingerprints behaviour, and the refusal names the earlier trial. This is not yet exercised live.
+
+**Not a defect, but the main inefficiency:**
+- **Steering and latch disagree.** The editor is steered by the checks and judged by agreement,
+  so most check-raising commits are refused: 12 of 13 in the stopped sessions.
+- **Telling the editor where its design disagrees with the peers would close that gap.** But it
+  would turn the peers into feedback, which risks importing their shared errors. That is a
+  design decision, not a fix.
+- **Short smoke runs end on the turn budget.** The editor loop allows as many agent turns as it
+  has trials, so a 3-trial byte_ctrl session made one commit.
+
+All smoke runs cost about 10–106k output tokens each.
