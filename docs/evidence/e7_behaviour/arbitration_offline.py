@@ -22,6 +22,14 @@ don't-care. A commit is accepted when the cell-weighted vote favours the edit. S
 consensus latch at tolerance 0.5 and 1 and against golden's net cells (all runs' stimulus and the
 run's own).
 
+VARIANT 2 (ARB_VARIANT=2), designed from variant 1's errors on these same commits, so tuned
+rather than tested: (a) the judge is told whether each configuration macro the spec names is
+defined, by preprocessing the design's own include files (sb's spec describes the module with and
+without its store buffer; or1200_defines.v leaves it out); (b) it must quote the governing spec
+sentences and rebuild every internal register the marked outputs depend on, edge by edge, before
+comparing (dc_fsm's write enables depend on a cache-inhibit flag set one edge after a request is
+accepted, not on the input).
+
 Judge prompts and replies stay in EQ/arbitration (private); the repo gets counts and verdicts.
 ARB_DRY=1 lists targets and episodes without calling; ARB_LIMIT=N stops after N new calls.
 -> docs/evidence/e7/ARBITRATION-OFFLINE.json, tables on stdout.
@@ -51,6 +59,7 @@ LONG = {v: k for k, v in SH.items()}
 POOL = {"i2c_master_byte_ctrl": ("acg1", "acg2", "acg3")}
 K, HORIZON, CONTEXT = int(os.environ.get("ARB_K", "4")), 16, 24
 EFFORT = os.environ.get("ARB_EFFORT", os.environ.get("OPENAI_REASONING_EFFORT", "xhigh"))
+VARIANT = os.environ.get("ARB_VARIANT", "1")
 CALLS = EQ / "arbitration" / "calls"
 LIVE = [("luna14", "or1200_dc_fsm", "val-cons-fv"), ("luna12", "or1200_sb", "smoket1-cons-fv"),
         ("luna14", "or1200_dc_fsm", "smoket1b-cons-fv")]
@@ -119,6 +128,44 @@ candidate matches it, answer "both wrong". Reply with one JSON object and nothin
 {"verdict": "X" | "Y" | "both wrong" | "undetermined", "reason": "<one sentence>"}"""
 
 
+SYSTEM2 = """You are a hardware verification judge. You are given a module's specification, its \
+build configuration, its ports, and a simulation excerpt in which two candidate implementations of \
+the module, X and Y, received exactly the same inputs. Their outputs differ on the rows marked <<. \
+Decide which candidate's outputs on the marked rows are the ones the specification requires, for \
+this configuration. Proceed in order: (1) quote the specification sentences that determine each \
+differing output, including the internal registers and flags they depend on and when each is \
+updated; (2) rebuild those registers and flags from reset, edge by edge, through the excerpt, as \
+the specification defines their updates -- a registered flag takes its new value only after the \
+clock edge, so do not substitute an input for a flag on the same row unless the specification \
+makes it combinational; (3) compute the value the specification requires on each marked row; \
+(4) compare with X and Y. If the specification does not determine the marked outputs, answer \
+"undetermined"; if neither candidate matches it, answer "both wrong". End your reply with one JSON \
+object: {"verdict": "X" | "Y" | "both wrong" | "undetermined", "reason": "<one sentence>"}"""
+if VARIANT == "2":
+    SYSTEM = SYSTEM2
+
+
+def configuration(mod):
+    """The state of every macro the spec names, from preprocessing the design's own include files."""
+    task = next(p.parent for p in DES.rglob("description.txt") if p.parent.name == mod)
+    spec = (task / "description.txt").read_text()
+    defs = sorted({p for d in (task, task.parent) for p in d.glob("*define*.v")})
+    known = set(re.findall(r"define\s+(\w+)", "".join(p.read_text(errors="replace") for p in defs)))
+    names = sorted(set(re.findall(r"\b[A-Z][A-Z0-9_]*_[A-Z0-9_]+\b", spec)) & known)
+    if not names:
+        return ""
+    probe = "".join(f'`include "{p.name}"\n' for p in defs) + "".join(
+        f"`ifdef {n}\nDEFINED {n} = `{n}\n`else\nUNDEFINED {n} =\n`endif\n" for n in names)
+    d = EQ / "arbitration"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "probe.v").write_text(probe)
+    out = __import__("subprocess").run(["iverilog", "-E", f"-I{task}", f"-I{task.parent}", "-o", "/dev/stdout",
+                                        str(d / "probe.v")], capture_output=True, text=True).stdout
+    state = {n: (d, v.strip()) for d, n, v in re.findall(r"^(DEFINED|UNDEFINED) (\w+) =(.*)$", out, re.M)}
+    return "".join(f"- {n} is NOT defined\n" if state.get(n, ("UNDEFINED",))[0] == "UNDEFINED" else
+                   f"- {n} is defined" + (f" as {state[n][1]}\n" if state[n][1] else "\n") for n in names)
+
+
 def hexw(v, w):
     return format(int(v), "x").zfill(max(1, -(-w // 4)))
 
@@ -146,11 +193,13 @@ def prompt(mod, run, ep, A, B, swap):
                f"were identical.\n" if lo else "")
     ports = "\n".join(f"- {d} {n} [{W[n]} bit]" for d, names in (("input", [n for _, n in ins]), ("output", outs))
                       for n in names)
+    cfg = configuration(mod) if VARIANT == "2" else ""
+    cfg = f"## Configuration\n\nFrom the design's include files:\n{cfg}\n" if cfg else ""
     return f"""## Specification
 
 {spec}
 
-## Ports
+{cfg}## Ports
 
 {ports}
 
@@ -317,7 +366,7 @@ def vote(e):
     return sum((x == "after") - (x == "before") for x in a) / len(a) if a else None
 
 
-out = {"k": K, "horizon": HORIZON, "effort": EFFORT, "commits": []}
+out = {"variant": VARIANT, "k": K, "horizon": HORIZON, "effort": EFFORT, "commits": []}
 for r in rows:
     vs = [(vote(e), e["cells"]) for e in r["asked"] if vote(e) is not None]
     score = sum(v * c for v, c in vs) / sum(c for _, c in vs) if vs else None
@@ -365,4 +414,4 @@ for name, f in RULES.items():
     out[name] = [kb, kw, rb, rw]
     print(f"| {name} | {kb} / {kw} | {rb} / {rw} |")
 if not os.environ.get("ARB_LIMIT"):
-    (E / "ARBITRATION-OFFLINE.json").write_text(json.dumps(out, indent=1, default=str) + "\n")
+    (E / f"ARBITRATION-OFFLINE{'' if VARIANT == '1' else '-v' + VARIANT}.json").write_text(json.dumps(out, indent=1, default=str) + "\n")
