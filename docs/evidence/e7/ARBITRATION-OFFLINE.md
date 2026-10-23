@@ -88,7 +88,7 @@ tested. It makes two changes, both generic:
 
 - **Both target commits are now decided correctly.** It keeps dc_fsm luna14's fix in every live
   and audited version (+1.00 each) and refuses sb luna12's regression (−1.00).
-- **It refuses most real I2C fixes by abstaining.** Of its 64 I2C answers, 48 are "undetermined".
+- **It refuses most real I2C fixes by abstaining.** Of its 64 I2C answers, 48 abstain (46 "undetermined").
   - For byte_ctrl, 24 of its 30 abstentions are on excerpts whose start is cut off. The rebuild
     procedure cannot start from reset there.
   - I2C testpoints run up to 4,000 rows, because the bus clock is divided down.
