@@ -140,6 +140,9 @@ feedback, the consensus latch and `--full-view`. The analysis tool is
 | smoke 5: dc_fsm luna14 (tolerance 0.5) | 1 commit (passing 65 → 72, agreement 99.81% → 98.96%), refused | unchanged. The refused design scored 96.1% edges, 470 cells fixed / 3 broken |
 | full arm: sb luna14 (before the free refusal), stopped after 13 commits | all refused; 10 of them behave the same (agreement 99.16% → 38.07%) | unchanged: the start already matches golden on every edge |
 | smoke 6: sb luna14 (current code) | 3 commits, all refused: two variants of the same configuration change (agreement → 38.07% and 41.79%, golden 47–49k cells broken) and one that changed no output | unchanged, 100% |
+| tolerance 1: sb luna12, 3 trials | 1 commit (passing 61 → 64, agreement 86.04% → 85.19%), **latched within tolerance** | **56.1% → 53.9%** edges, 36.7% → 35.7% testpoints (0 cells fixed / 1,733 broken) |
+| tolerance 1: dc_fsm luna14, 3 trials | no commit: the 3 agent turns were spent reading and staging | unchanged, 95.8% |
+| tolerance 1: dc_fsm luna14, 6 trials | 1 commit (passing 65 → 72, agreement 99.81% → 98.96%), **latched within tolerance** | **95.8% → 96.1%** edges, 70.9% → 75.4% testpoints (470 fixed / 3 broken) |
 
 **Defects found and fixed:**
 1. **A rise below 0.1 points latched** (smoke 1). Gains that small were a coin flip in the audited
@@ -174,7 +177,14 @@ pt, or passing rises and agreement falls less than τ":
 - From 0.5 to 1, the offline commits change by +3 net better and +2 net worse commits, gains
   +5.5 and losses −2.4 points. That is close to even.
 - Above 2, losses grow on the model arm.
-- The live case for 1 is dc_fsm luna14's two large refused fixes, one run.
+- **Live at tolerance 1,** each job made the commit its audited commits predicted:
+  - dc_fsm luna14's real fix latched: +470 / −3 cells.
+  - sb luna12's regression latched: 0 / −1,733 cells.
+- **In the band between 0.5 and 1 point, agreement does not separate fixes from regressions:**
+  3 better and 2 worse offline, 1 and 1 live.
+  - A wider tolerance trades one for the other.
+  - Separating them needs a different signal for those commits, not a different threshold.
+  - The tolerance stays 0.5, the conservative side.
 
 **Not a defect, but the main inefficiency:**
 - **Steering and latch disagree.** The editor is steered by the checks and judged by agreement,
