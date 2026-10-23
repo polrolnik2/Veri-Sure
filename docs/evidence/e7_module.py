@@ -79,7 +79,8 @@ def _step(name: str, argv: list[str], log: Path) -> bool:
 def main() -> int:
     pos = [a for a in sys.argv[1:] if not a.startswith("--")
            and sys.argv[sys.argv.index(a) - 1] not in ("--trials", "--rounds", "--rtl", "--tag",
-                                                       "--feedback", "--latch", "--peer")]
+                                                       "--feedback", "--latch", "--peer",
+                                                       "--latch-margin")]
     if len(pos) < 2:
         print(__doc__.strip().splitlines()[2])
         return 2
@@ -123,6 +124,7 @@ def main() -> int:
                                  *(["--feedback", _opt("--feedback")] if _opt("--feedback") else []),
                                  #: `--latch consensus --peer X ...` and `--full-view`: see e7_rtl_editor.py
                                  *(["--latch", _opt("--latch")] if _opt("--latch") else []),
+                                 *(["--latch-margin", _opt("--latch-margin")] if _opt("--latch-margin") else []),
                                  *[a for i, x in enumerate(sys.argv[:-1]) if x == "--peer"
                                    for a in ("--peer", sys.argv[i + 1])],
                                  *(["--full-view"] if "--full-view" in sys.argv else []),

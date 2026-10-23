@@ -1586,9 +1586,14 @@ class _EditSession:
             result["trace_summary"] = self.trace_summary()
             return result
         self.write_rtl(old_file_content)
+        margin = consensus.get("min_gain") or 0.0
+        if a0 is not None and a1 is not None and a0 < a1 < a0 + margin:
+            away_note += (f"  It rose by less than the {100 * margin:.1f}-point margin: a change that "
+                          f"small is as often a new defect as a fix.")
         result["error_msg"] = (
             f"Commit did NOT latch: agreement with the {n} independently generated designs went "
-            f"{pct(a0)} -> {pct(a1)} of edges, and a commit latches only when it RISES. The "
+            f"{pct(a0)} -> {pct(a1)} of edges, and a commit latches only when it RISES by at least "
+            f"{100 * margin:.1f} points. The "
             f"accepted RTL is unchanged and your staged edits are kept -- adjust them and commit "
             f"again.{req_note}{away_note}  A change that satisfies a check while moving outputs "
             f"away from every independent reading of the specification is more likely a new "

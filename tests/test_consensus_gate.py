@@ -52,6 +52,23 @@ def test_judge_reports_direction_and_the_outputs_that_moved_away(gate):
 
 
 @needs_iverilog
+def test_a_rise_below_the_margin_does_not_latch(tmp_path):
+    g = ConsensusGate(contract=CONTRACT, rows_by_tp=ROWS, peers=[counter(1), counter(1)], workdir=tmp_path,
+                      min_gain=1.0)
+    j = g.judge(counter(2), counter(1))
+    assert j["after"] > j["before"] and not j["rises"]
+    assert ConsensusGate.MIN_GAIN == pytest.approx(0.001)
+
+
+def test_the_margin_is_named_when_a_small_rise_is_refused(tmp_path):
+    s = _session(tmp_path)
+    c = {"peers": 3, "before": 0.6, "after": 0.6005, "rises": False, "outputs_moved_away": [],
+         "behaviour_changed": True, "min_gain": 0.001}
+    r = s._consensus_decision({}, c, None, None, "old", 2, None, "{}")
+    assert "0.1-point margin" in r["error_msg"] and "at least 0.1 points" in r["error_msg"]
+
+
+@needs_iverilog
 def test_a_design_that_does_not_compile_never_latches(gate):
     assert gate.agreement("module cnt(input clk; endmodule") is None
     assert not gate.judge(counter(1), "module cnt(input clk; endmodule")["rises"]

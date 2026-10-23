@@ -75,7 +75,7 @@ def _opt(name, default=None):
 args = [a for a in sys.argv[1:] if not a.startswith("--")
         and sys.argv[sys.argv.index(a) - 1] not in
         ("--spec", "--trials", "--rounds", "--rtl", "--summary", "--feedback",
-         "--extra", "--include", "--latch", "--peer")]
+         "--extra", "--include", "--latch", "--peer", "--latch-margin")]
 if len(args) < 2 or not _opt("--spec"):
     print(__doc__.strip().splitlines()[2])
     raise SystemExit(2)
@@ -89,6 +89,8 @@ FEEDBACK = _opt("--feedback", "checks")
 EXTRA = [sys.argv[i + 1] for i, a in enumerate(sys.argv[:-1]) if a == "--extra"]
 INCLUDE = [sys.argv[i + 1] for i, a in enumerate(sys.argv[:-1]) if a == "--include"]
 LATCH = _opt("--latch", "checks")
+#: The smallest agreement rise that latches, in points of edges (default: ConsensusGate.MIN_GAIN).
+MARGIN = _opt("--latch-margin")
 PEERS = [sys.argv[i + 1] for i, a in enumerate(sys.argv[:-1]) if a == "--peer"]
 FULL_VIEW = "--full-view" in sys.argv
 if LATCH not in ("checks", "consensus") or (LATCH == "consensus" and not PEERS):
@@ -195,7 +197,8 @@ if LATCH == "consensus":
     spec_dir = Path(_opt("--spec")).resolve().parent
     gate = ConsensusGate.from_run(OUT, [Path(p).read_text(encoding="utf-8") for p in PEERS],
                                   include_dirs=[*INCLUDE, str(spec_dir), str(spec_dir.parent)],
-                                  extra_sources=EXTRA, workdir=OUT / "consensus_gate")
+                                  extra_sources=EXTRA, workdir=OUT / "consensus_gate",
+                                  min_gain=None if MARGIN is None else float(MARGIN) / 100)
     print(f"consensus latch: {len(gate.peers)} of {len(PEERS)} peer(s) simulated on "
           f"{len(gate.tps)} testpoint(s)", flush=True)
 
@@ -282,6 +285,7 @@ SUMMARY.write_text(json.dumps({
     "requirements": n_req, "set": "shipped" if shipped else "oracles",
     "trials": TRIALS, "rounds": ROUNDS, "feedback": FEEDBACK,
     "latch": LATCH, "peers": PEERS, "full_view": FULL_VIEW,
+    "latch_margin_points": None if gate is None else 100 * gate.min_gain,
     "extra_sources": EXTRA, "include_dirs": INCLUDE,
     "seconds": round(time.time() - t0),
     "history": history, "final": history[-1] if history else None,

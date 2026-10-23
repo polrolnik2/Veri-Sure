@@ -92,12 +92,21 @@ def realize_stimulus(run_dir: Path, contract: dict) -> dict[str, list[list[int |
 class ConsensusGate:
     """Score designs by edge agreement with independently generated peers on one stimulus."""
 
+    #: **THE SMALLEST RISE THAT COUNTS**, as a share of edges (0.001 = 0.1 points). In the audited
+    #: commits a rise below it was a coin flip against golden (checks arm 5 better : 6 worse, model
+    #: arm 3 : 6), a rise above 1 point nearly always right (11 : 0, 3 : 1). Chosen after seeing
+    #: both arms (docs/evidence/e7/LATCH-OFFLINE.md), so it is a tuned value, not a tested one. The
+    #: first live smoke run latched a +0.08-point rise that broke 1,565 output cells.
+    MIN_GAIN = 0.001
+
     def __init__(self, *, contract: dict, rows_by_tp: dict[str, list[list[int | None]]],
                  peers: Iterable[str], include_dirs: Iterable[str] = (),
-                 extra_sources: Iterable[str] = (), workdir: str | Path | None = None):
+                 extra_sources: Iterable[str] = (), workdir: str | Path | None = None,
+                 min_gain: float | None = None):
         from specflow.ports import idle_values, inactive_value, is_reset
 
         self.contract = contract
+        self.min_gain = self.MIN_GAIN if min_gain is None else float(min_gain)
         self.module = str(contract.get("module_name") or "TopModule")
         io = contract.get("io") or []
         self.clock = (contract.get("clocking") or {}).get("clock", {}).get("name")
@@ -195,8 +204,9 @@ class ConsensusGate:
                 if d < -1e-9:
                     fell.append((name, d))
         fell.sort(key=lambda kv: kv[1])
-        return {"peers": len(self.peers), "before": a0, "after": a1,
-                "rises": a0 is not None and a1 is not None and a1 > a0 + 1e-12,
+        return {"peers": len(self.peers), "before": a0, "after": a1, "min_gain": self.min_gain,
+                "rises": a0 is not None and a1 is not None and a1 >= a0 + self.min_gain - 1e-12
+                and a1 > a0 + 1e-12,
                 "outputs_moved_away": [n for n, _ in fell],
                 #: False when no spec output differs on any edge: the batch cannot move agreement
                 "behaviour_changed": None if tb is None or ta is None else tb != ta}
