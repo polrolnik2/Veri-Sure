@@ -1410,6 +1410,21 @@ class _EditSession:
                 "consumed. Use add_block/replace_block/remove_block first.")
             return result
 
+        # A REPEAT OF REFUSED BEHAVIOUR IS REFUSED FOR FREE, under the consensus latch. The gate's
+        # simulation is seconds; the review is minutes and a trial. Measured on the first
+        # full-budget run (sb luna14): the editor resubmitted a design behaving exactly like one
+        # already refused (agreement 99.2% -> 38.1%) five times, each a trial, though each refusal
+        # said so.
+        if self.latch_rule == "consensus" and self.latch_gate is not None and self.refused_behaviours:
+            fp = self.latch_gate.fingerprint(self.staged_rtl)
+            if fp is not None and fp in self.refused_behaviours:
+                result["error_msg"] = (
+                    f"Not committed, and NO TRIAL WAS CHARGED: the staged batch behaves exactly like "
+                    f"the one refused at trial {self.refused_behaviours[fp]} -- the same value on every "
+                    f"output at every edge -- so it cannot latch. Staged edits are kept; change what "
+                    f"the outputs do, or discard and try something else.")
+                return result
+
         # REFUSED BEFORE THE COUNTER MOVES, and staging stays open afterwards so
         # the agent can still be asked to explain itself.
         if self.action_calls >= self.max_trials:

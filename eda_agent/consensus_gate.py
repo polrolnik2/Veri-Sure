@@ -193,6 +193,11 @@ class ConsensusGate:
             return None
         return statistics.mean(self._agree(tr, p) for p in self.peers)
 
+    def fingerprint(self, rtl: str) -> str | None:
+        """What `rtl` does on the stimulus, as a hash; None if it does not compile."""
+        tr = self.trace(rtl)
+        return None if tr is None else hashlib.sha256(json.dumps(tr, sort_keys=True).encode()).hexdigest()[:16]
+
     def judge(self, before: str, after: str) -> dict:
         """Did `after` move toward the peers, and which outputs moved away?"""
         a0, a1 = self.agreement(before), self.agreement(after)
@@ -211,5 +216,4 @@ class ConsensusGate:
                 #: False when no spec output differs on any edge: the batch cannot move agreement
                 "behaviour_changed": None if tb is None or ta is None else tb != ta,
                 #: what `after` does on the stimulus, as a hash: equal for designs that behave alike
-                "after_behaviour": None if ta is None else
-                hashlib.sha256(json.dumps(ta, sort_keys=True).encode()).hexdigest()[:16]}
+                "after_behaviour": self.fingerprint(after)}

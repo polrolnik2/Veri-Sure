@@ -139,6 +139,15 @@ def test_resubmitting_a_refused_behaviour_is_named(tmp_path):
     assert "EXACTLY like the one refused" in again["error_msg"]
 
 
+def test_a_repeat_of_refused_behaviour_is_refused_without_a_trial(tmp_path):
+    s = _session(tmp_path)
+    s.latch_gate = type("G", (), {"fingerprint": staticmethod(lambda rtl: "abc"), "min_gain": 0.001})()
+    s.refused_behaviours = {"abc": 2}
+    s.staged_rtl = "same behaviour"
+    r = s.commit()
+    assert "NO TRIAL WAS CHARGED" in r["error_msg"] and s.action_calls == 0
+
+
 @needs_iverilog
 def test_designs_that_behave_alike_share_a_fingerprint(gate):
     a = gate.judge(counter(2), counter(1))["after_behaviour"]
