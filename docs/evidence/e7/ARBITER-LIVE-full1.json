@@ -1866,6 +1866,19 @@
      "golden_net": 37788,
      "golden_fixed": 81749,
      "golden_broken": 43961
+    },
+    {
+     "how": "refused",
+     "passing": "84 -> 79",
+     "agreement": [
+      "85.20",
+      "69.20"
+     ],
+     "judge_score": null,
+     "judge_tokens": null,
+     "golden_net": -49042,
+     "golden_fixed": 29180,
+     "golden_broken": 78222
     }
    ],
    "replay_reproduces": true,
@@ -1876,7 +1889,7 @@
    "tp_final": 0.028729281767955802,
    "cells_fixed": 2842,
    "cells_broken": 7180,
-   "editor_output_tokens": 709082,
+   "editor_output_tokens": 757685,
    "judge_output_tokens": 559903
   }
  ]
