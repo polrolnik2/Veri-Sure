@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import logging
 import os
 import re
@@ -2514,6 +2515,11 @@ def _render_continue_debug_prompt(session: "_EditSession") -> str:
     )
 
 
+def turn_budget(trials: int, turns_per_trial: float = 1.0) -> int:
+    """Agent turns after the first, for a session of `trials` trials (the trial cap still binds)."""
+    return max(int(trials), int(math.ceil(int(trials) * float(turns_per_trial))))
+
+
 class _StallCounter:
     """Consecutive TRIALS that failed to beat the best point seen.
 
@@ -2634,6 +2640,10 @@ class RTLEditor:
         #: spent 19 of 40 trials and every round after the first ended on this
         #: counter, not on the budget.
         stall_rounds: int = 6,
+        #: Agent turns allowed per trial. A turn that only reads or stages spends no trial, so
+        #: at 1 a session ends on its turns with trials unspent: MEASURED on the matched live
+        #: sessions (docs/evidence/e7/ARBITER-LIVE.md), 6-trial sessions committed 1-4 times.
+        turns_per_trial: float = 1.0,
         #: None reads EDA_ROLLBACK_GUARD from the environment ("off"/"0"/"false"
         #: disable it); anything explicit wins over the environment. The guard
         #: stays ON by default -- a greedy filter is the right default, and this
@@ -2698,6 +2708,7 @@ class RTLEditor:
         except ValueError:
             pass
         self._stall_rounds = max(1, int(stall_rounds))
+        self._turns_per_trial = max(1.0, float(turns_per_trial))
         self._rollback_guard = resolve_rollback_guard(rollback_guard)
         self._session: _EditSession | None = None
 
@@ -3285,7 +3296,7 @@ class RTLEditor:
         else:
             _update_stall_tracking()
 
-        for _ in range(session_max_trials):
+        for _ in range(turn_budget(session_max_trials, self._turns_per_trial)):
             if self._session.is_done:
                 break
             # Once the session's action budget is exhausted, every further

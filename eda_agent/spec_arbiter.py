@@ -16,6 +16,13 @@ reset the bench applies, and the testpoint from reset, with long runs of identic
 It never sees the checks, the peers, or which candidate is the edit. The score is the cell-weighted
 vote, +1 for the edit and -1 for the design before it; 0 when every answer abstains.
 
+**A CHILD'S PORTS** (`child_sources`, variant 4 offline): a design that instantiates a given child
+module -- byte_ctrl's reference bit controller -- has pins that come straight from that child, so
+they differ only because this module drives the child differently. Each child port wired to an
+internal net is probed in both candidates' simulations and shown as a column, and the judge is told
+the child is the given reference: it judges this module's decisions, not the child's timing.
+Offline this took byte_ctrl's five commits from 3 to 5 decided as golden does.
+
 Prompts and replies are logged to `workdir/calls.jsonl` (model I/O: keep it out of public repos).
 """
 from __future__ import annotations
@@ -72,7 +79,7 @@ class SpecArbiter:
 
     def __init__(self, *, gate, spec: str, children: dict[str, str] | None = None,
                  include_dirs: Iterable[str] = (), cfg=None, workdir: str | Path | None = None,
-                 k: int | None = None, parallel: int = 8):
+                 k: int | None = None, parallel: int = 8, child_sources: Iterable[str] = ()):
         self.gate, self.k, self.parallel = gate, int(k or self.K), parallel
         self.children = dict(children or {})
         self.spec = spec + "".join(f"\n\n## Specification of the child module {n}, which this module "
@@ -83,6 +90,73 @@ class SpecArbiter:
         self.workdir.mkdir(parents=True, exist_ok=True)
         self.band = self.BAND
         self._decided: dict[tuple, dict] = {}
+        self.child_sources = [str(f) for f in child_sources]
+        self._child: dict[str, dict | None] = {}
+
+    # ------------------------------------------------------------ the child's ports
+    def child_ports(self, rtl: str) -> list[tuple]:
+        """(port, net, width, dir) for each child port wired to one of this design's internal nets."""
+        g = self.gate
+        top = set(g._all_inputs) | set(g.outputs)
+        text = re.sub(r"//[^\n]*", "", re.sub(r"/\*.*?\*/", "", rtl, flags=re.S))
+        out = []
+        for src in self.child_sources:
+            ref = Path(src).read_text(errors="replace")
+            name = re.search(r"^\s*module\s+(\w+)", ref, re.M)
+            if not name:
+                continue
+            decl = {n: (d, int(h) - int(lo) + 1 if h else 1) for d, h, lo, n in re.findall(
+                r"\b(input|output)\s+(?:reg\s+|wire\s+)?(?:\[\s*(\d+)\s*:\s*(\d+)\s*\]\s*)?(\w+)", ref)}
+            m = re.search(rf"\b{name.group(1)}\b\s*(?:#\s*\(.*?\)\s*)?\w+\s*\((.*?)\);", text, re.S)
+            for port, net in re.findall(r"\.(\w+)\s*\(\s*(\w+)\s*\)", m.group(1)) if m else []:
+                if net not in top and port in decl:
+                    out.append((port, net, decl[port][1], decl[port][0]))
+        return sorted(out, key=lambda t: t[3])  # what this module drives in, then the child's reply
+
+    def child_trace(self, rtl: str) -> dict | None:
+        """{"ports": [...], "rows": {tp: [[values] per edge]}} from this design's own simulation."""
+        cp = self.child_ports(rtl)
+        if not cp:
+            return None
+        g = self.gate
+        wrapped = re.search(r"\bmodule\s+" + re.escape(g.module) + r"__probed\b", rtl)
+        text = rtl if wrapped else (__import__("eda_agent.strip_probes", fromlist=["deliverable"])
+                                    .deliverable(rtl, g.contract) or rtl)
+        h = hashlib.sha256(text.encode()).hexdigest()[:16]
+        if h in self._child:
+            return self._child[h]
+        inst = re.search(re.escape(g.module) + r"__probed\s+(\w+)\s*\(", text)
+        path = f"dut.{inst.group(1)}" if inst else "dut"
+        tb = (g.workdir / "tb.v").read_text()
+        # tb-level wires on this design's own nets: iverilog asserts on a reference into a child
+        wires = "".join(f"  wire [{w - 1}:0] p_{port} = {path}.{net};\n" for port, net, w, _ in cp)
+        tb = tb.replace("  integer fi,", wires + "  integer fi,", 1)
+        tb = tb.replace('$fwrite(fo, "%h', f'$fwrite(fo, "{" ".join("%h" for _ in cp)} | ", '
+                        f'{", ".join("p_" + c[0] for c in cp)});\n        $fwrite(fo, "%h', 1)
+        d = self.workdir / "child"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"{h}.tb.v").write_text(tb)
+        (d / f"{h}.sv").write_text(text)
+        have = set(re.findall(r"^\s*module\s+(\w+)", text, re.M))
+        libs = [f for f in g.extra_sources if Path(f).stem not in have]
+        c = subprocess.run(["iverilog", "-g2012", "-s", "tb", "-o", str(d / f"{h}.vvp"), *[f"-I{x}" for x in g.include_dirs],
+                            str(d / f"{h}.tb.v"), str(d / f"{h}.sv"), *libs], capture_output=True, text=True)
+        res = None
+        if c.returncode == 0:
+            o = d / f"{h}.out"
+            subprocess.run(["vvp", "-n", str(d / f"{h}.vvp"), f"+in={g.workdir / 'stim.txt'}", f"+out={o}"],
+                           capture_output=True, text=True, timeout=3600)
+            if o.is_file():
+                rows, cur = {tp: [] for tp in g.tps}, -1
+                for line in o.read_text().splitlines():
+                    if line == "#":
+                        cur += 1
+                    elif 0 <= cur < len(g.tps):
+                        rows[g.tps[cur]].append(line.split(" | ")[0].split())
+                res = {"ports": [list(x) for x in cp], "rows": rows}
+                o.unlink()
+        self._child[h] = res
+        return res
 
     # ------------------------------------------------------------ excerpts
     def episodes(self, A: dict, B: dict) -> list[dict]:
@@ -116,7 +190,7 @@ class SpecArbiter:
                 f"{held or 'every input 0'} and every other input 0; then one cycle with {rel}, the other "
                 f"inputs unchanged. Every register starts from that reset.")
 
-    def prompt(self, ep: dict, A: dict, B: dict, swap: bool) -> str:
+    def prompt(self, ep: dict, A: dict, B: dict, swap: bool, child: tuple | None = None) -> str:
         g = self.gate
         rows_in = g.rows_by_tp[ep["tp"]]
         allin = g._all_inputs
@@ -125,28 +199,53 @@ class SpecArbiter:
         x, y = (A[ep["tp"]], B[ep["tp"]]) if swap else (B[ep["tp"]], A[ep["tp"]])
         fold = ep["first"] > self.FOLD_AFTER
         hi = min(len(x), len(y), len(rows_in), ep["end"] + 4) - 1
+        cx, cy, cports = [], [], []
+        if child and child[0] and child[1]:  # (before, after) child traces, X and Y as the outputs
+            ca, cb = child[0]["rows"][ep["tp"]], child[1]["rows"][ep["tp"]]
+            cx, cy = (ca, cb) if swap else (cb, ca)
+            cports = [c[0] for c in child[0]["ports"]]
+            hi = min(hi, len(cx) - 1, len(cy) - 1)
         D = [k for k in range(len(outs)) if any(x[i][k] != y[i][k] for i in range(hi + 1))]
         S = [k for k in range(len(outs)) if k not in D]
+        CD = [k for k in range(len(cports)) if any(cx[i][k] != cy[i][k] for i in range(hi + 1))]
+        CS = [k for k in range(len(cports)) if k not in CD]
 
         def hexw(v, n):
             return format(int(v or 0), "x").zfill(max(1, -(-W.get(n, 1) // 4)))
-        lines = [" | ".join(["row"] + [n for _, n in ins] + [outs[k] for k in S] + [f"X.{outs[k]}" for k in D]
-                            + [f"Y.{outs[k]}" for k in D] + [""])]
+        lines = [" | ".join(["row"] + [n for _, n in ins] + [f"child.{cports[k]}" for k in CS] + [outs[k] for k in S]
+                            + [f"X.child.{cports[k]}" for k in CD] + [f"X.{outs[k]}" for k in D]
+                            + [f"Y.child.{cports[k]}" for k in CD] + [f"Y.{outs[k]}" for k in D] + [""])]
         folded, i = False, 0
         while i <= hi:
             j = i
             while (fold and j + 1 < ep["first"] - self.KEEP_BEFORE and rows_in[j + 1] == rows_in[i]
-                   and x[j + 1] == x[i] and y[j + 1] == y[i]):
+                   and x[j + 1] == x[i] and y[j + 1] == y[i]
+                   and (not cports or (cx[j + 1] == cx[i] and cy[j + 1] == cy[i]))):
                 j += 1
             folded |= j > i
             lines.append(" | ".join([str(i) if j == i else f"{i}-{j}"] + [hexw(rows_in[i][c], n) for c, n in ins]
-                                    + [x[i][k] for k in S] + [x[i][k] for k in D] + [y[i][k] for k in D]
+                                    + [cx[i][k] for k in CS] + [x[i][k] for k in S] + [cx[i][k] for k in CD]
+                                    + [x[i][k] for k in D] + [cy[i][k] for k in CD] + [y[i][k] for k in D]
                                     + ["<<" if x[i] != y[i] else ""]))
             i = j + 1
         ports = "\n".join(f"- {d} {n} [{W.get(n, 1)} bit]" for d, names in (("input", [n for _, n in ins]),
                                                                              ("output", outs)) for n in names)
         cfg = f"## Configuration\n\nFrom the design's include files:\n{self.config}\n" if self.config else ""
-        fold_note = ("A row labelled a-b stands for rows a through b, which are all identical to row a in "
+        if cports:
+            drv = [c[0] for c in child[0]["ports"] if c[3] == "input"]
+            ret = [c[0] for c in child[0]["ports"] if c[3] == "output"]
+            kid = next(iter(self.children), "its child module")
+            fold_note_child = (
+                f"- This module instantiates {kid}. That child is the given reference implementation: "
+                f"correct, and identical in both candidates. Columns child.<port> are its ports: "
+                f"{', '.join(drv)} {'is' if len(drv) == 1 else 'are'} driven by this module, "
+                f"{', '.join(ret)} {'is' if len(ret) == 1 else 'are'} the child's reply. Outputs of this module "
+                f"that come straight from the child differ only because of what this module drives "
+                f"into it. Judge this module's own behaviour against its specification: what it drives "
+                f"into the child, and its own outputs, given the child's replies.\n")
+        else:
+            fold_note_child = ""
+        fold_note = fold_note_child + ("A row labelled a-b stands for rows a through b, which are all identical to row a in "
                      "inputs and in both candidates' outputs. There is a clock edge after every one of them, so "
                      "internal counters and registers keep advancing through the range.\n" if folded else "")
         return f"""## Specification
@@ -222,8 +321,9 @@ class SpecArbiter:
             return self._decided[key]
         chosen = self.pick(self.episodes(A, B), key[0] + key[1])
         jobs = [(e, swap) for e in chosen for swap in (False, True)]
+        child = (self.child_trace(before), self.child_trace(after)) if self.child_sources else None
         with ThreadPoolExecutor(max_workers=self.parallel) as pool:
-            recs = list(pool.map(lambda job: self.ask(self.prompt(job[0], A, B, job[1])), jobs))
+            recs = list(pool.map(lambda job: self.ask(self.prompt(job[0], A, B, job[1], child)), jobs))
         for (e, swap), rec in zip(jobs, recs):
             v = rec["verdict"]
             e.setdefault("answers", []).append({"X": "before" if swap else "after",

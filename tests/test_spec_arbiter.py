@@ -149,3 +149,44 @@ def test_the_judge_is_not_asked_when_agreement_decides(tmp_path):
 def test_the_arbiter_needs_the_consensus_latch():
     with pytest.raises(ValueError):
         RTLEditor(None, sim_reviewer=None, latch_arbiter=_Fixed(1.0))
+
+
+def test_turns_per_trial_widens_the_turn_budget_not_the_trials():
+    from eda_agent.rtl_editor import turn_budget
+    assert turn_budget(6) == 6 and turn_budget(6, 3) == 18 and turn_budget(0, 3) == 0
+    assert turn_budget(5, 0.5) == 5, "never fewer turns than trials"
+
+
+CHILD = """module pulse(input clk, input go, output reg done);
+  always @(posedge clk) done <= go;
+endmodule
+"""
+PARENT_CONTRACT = {"module_name": "top", "clocking": {"clock": {"name": "clk"}},
+                   "io": [{"name": "clk", "dir": "input", "width": 1}, {"name": "rst", "dir": "input", "width": 1},
+                          {"name": "en", "dir": "input", "width": 1}, {"name": "done", "dir": "output", "width": 1}]}
+
+
+def parent(every: int) -> str:
+    return f"""module top(input clk, input rst, input en, output done);
+  reg [1:0] n; reg go_r;
+  always @(posedge clk) if (rst) begin n <= 0; go_r <= 0; end
+    else begin n <= n + en; go_r <= en & (n % {every} == 0); end
+  pulse u_child(.clk(clk), .go(go_r), .done(done));
+endmodule
+"""
+
+
+@needs_iverilog
+def test_a_child_driven_output_is_shown_with_the_childs_ports(tmp_path):
+    (tmp_path / "pulse.v").write_text(CHILD)
+    rows = {"TP-0000": [[0, 0, 1]] * 8}
+    gate = ConsensusGate(contract=PARENT_CONTRACT, rows_by_tp=rows, peers=[parent(2) + CHILD],
+                         extra_sources=[str(tmp_path / "pulse.v")], workdir=tmp_path / "g")
+    a = _Judge(gate=gate, spec="done pulses.", children={"pulse": "go is delayed to done."},
+               workdir=tmp_path / "a", child_sources=[str(tmp_path / "pulse.v")])
+    assert [c[:2] for c in a.child_ports(parent(2))] == [("go", "go_r")], "only ports on internal nets"
+    tr = a.child_trace(parent(2))
+    assert tr and len(tr["rows"]["TP-0000"]) == 8
+    A, B = gate.trace(parent(2)), gate.trace(parent(1))
+    p = a.prompt(a.episodes(A, B)[0], A, B, False, (a.child_trace(parent(2)), a.child_trace(parent(1))))
+    assert "X.child.go" in p and "Y.child.go" in p and "given reference implementation" in p

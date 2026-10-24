@@ -80,7 +80,8 @@ def main() -> int:
     pos = [a for a in sys.argv[1:] if not a.startswith("--")
            and sys.argv[sys.argv.index(a) - 1] not in ("--trials", "--rounds", "--rtl", "--tag",
                                                        "--feedback", "--latch", "--peer",
-                                                       "--latch-margin", "--latch-tolerance")]
+                                                       "--latch-margin", "--latch-tolerance",
+                                                       "--turns-per-trial")]
     if len(pos) < 2:
         print(__doc__.strip().splitlines()[2])
         return 2
@@ -131,6 +132,8 @@ def main() -> int:
                                    for a in ("--peer", sys.argv[i + 1])],
                                  *(["--full-view"] if "--full-view" in sys.argv else []),
                                  *(["--arbiter"] if "--arbiter" in sys.argv else []),
+                                 *(["--turns-per-trial", _opt("--turns-per-trial")]
+                                   if _opt("--turns-per-trial") else []),
                                  *[a for e in extras for a in ("--extra", e)],
                                  *([a for d in (task, task.parent) for a in ("--include", str(d))]
                                    if extras else []),

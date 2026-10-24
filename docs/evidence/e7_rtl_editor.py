@@ -79,7 +79,8 @@ def _opt(name, default=None):
 args = [a for a in sys.argv[1:] if not a.startswith("--")
         and sys.argv[sys.argv.index(a) - 1] not in
         ("--spec", "--trials", "--rounds", "--rtl", "--summary", "--feedback",
-         "--extra", "--include", "--latch", "--peer", "--latch-margin", "--latch-tolerance")]
+         "--extra", "--include", "--latch", "--peer", "--latch-margin", "--latch-tolerance",
+         "--turns-per-trial")]
 if len(args) < 2 or not _opt("--spec"):
     print(__doc__.strip().splitlines()[2])
     raise SystemExit(2)
@@ -100,6 +101,8 @@ TOLERANCE = _opt("--latch-tolerance")
 PEERS = [sys.argv[i + 1] for i, a in enumerate(sys.argv[:-1]) if a == "--peer"]
 FULL_VIEW = "--full-view" in sys.argv
 ARBITER = "--arbiter" in sys.argv
+#: Agent turns per trial (RTLEditor(turns_per_trial=...)); 1, the default, ends sessions on turns.
+TURNS = float(_opt("--turns-per-trial", 1))
 if LATCH not in ("checks", "consensus") or (LATCH == "consensus" and not PEERS) or (ARBITER and LATCH != "consensus"):
     print("--latch must be checks or consensus, consensus needs at least one --peer, and --arbiter needs consensus")
     raise SystemExit(2)
@@ -218,7 +221,7 @@ if ARBITER:
             for f in EXTRA if (Path(f).parent / "description.txt").is_file()}
     arbiter = SpecArbiter(gate=gate, spec=spec, children=kids,
                           include_dirs=[*INCLUDE, str(spec_dir), str(spec_dir.parent)], cfg=cfg,
-                          workdir=OUT / "spec_arbiter")
+                          workdir=OUT / "spec_arbiter", child_sources=EXTRA)
     print(f"spec arbiter: children {sorted(kids) or 'none'}; macros: "
           f"{arbiter.config.count(chr(10))}", flush=True)
 
@@ -277,7 +280,7 @@ async def _drive() -> None:
                            stimulus_stager=stager,
                            requirements=load_requirement_views(OUT, contract),
                            contract=contract, latch_rule=LATCH, latch_gate=gate,
-                           latch_arbiter=arbiter, full_view=FULL_VIEW)
+                           latch_arbiter=arbiter, full_view=FULL_VIEW, turns_per_trial=TURNS)
         _, repaired, used, _ = await editor.chat(
             spec=spec, output_dir_per_run=str(OUT), sim_failed_log=sim_output,
             sim_mismatch_cnt=failing, contract_json=contract_json,
@@ -304,7 +307,7 @@ SUMMARY.write_text(json.dumps({
     "run": str(RUN), "module": top, "bodies": len(oracles),
     "requirements": n_req, "set": "shipped" if shipped else "oracles",
     "trials": TRIALS, "rounds": ROUNDS, "feedback": FEEDBACK,
-    "latch": LATCH, "peers": PEERS, "full_view": FULL_VIEW, "arbiter": ARBITER,
+    "latch": LATCH, "peers": PEERS, "full_view": FULL_VIEW, "arbiter": ARBITER, "turns_per_trial": TURNS,
     "latch_margin_points": None if gate is None else 100 * gate.min_gain,
     "latch_tolerance_points": None if gate is None else 100 * gate.tolerance,
     "extra_sources": EXTRA, "include_dirs": INCLUDE,
