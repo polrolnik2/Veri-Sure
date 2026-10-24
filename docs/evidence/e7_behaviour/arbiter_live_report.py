@@ -83,8 +83,12 @@ for job in sys.argv[1:]:
                "tp_start": fin["tp_before"], "tp_final": fin["tp_after"], "cells_fixed": fin["cells_fixed"],
                "cells_broken": fin["cells_broken"], "editor_output_tokens": ed_tok, "judge_output_tokens": j_tok}
         for i, c in enumerate(commits):
-            g = FA["compare"](sim(c["before"], contract), sim(c["submitted"], contract), G)
+            Tb, Ts = sim(c["before"], contract), sim(c["submitted"], contract)
             a = arbs[i] if i < len(arbs) else None
+            if Tb is None or Ts is None:  # a commit that does not compile is refused; nothing to score
+                row["commits"].append({"how": how(c["reason"], c["latched"]), "compiles": False})
+                continue
+            g = FA["compare"](Tb, Ts, G)
             m = re.search(r"([\d.]+)% -> ([\d.]+)%", c["reason"])
             w = re.search(r"on ([\d.]+)% of edges \(was ([\d.]+)%\)", c["reason"])  # LATCHED ON AGREEMENT
             agreement = m.groups() if m else (w.group(2), w.group(1)) if w else None
@@ -110,6 +114,9 @@ for job in sys.argv[1:]:
                   f"{100 * fc['edge_before']:.1f}%), {100 * fc['tp_after']:.1f}% testpoints (start "
                   f"{100 * fc['tp_before']:.1f}%); cells +{fc['cells_fixed']} / -{fc['cells_broken']}")
         for k, c in enumerate(row["commits"], 1):
+            if c.get("compiles") is False:
+                print(f"  - commit {k}: {c['how']}; does not compile")
+                continue
             agr = f"{c['agreement'][0]}->{c['agreement'][1]}%" if c["agreement"] else "?"
             jd = "" if c["judge_score"] is None else f", judge {c['judge_score']:+.2f}"
             verdict = ("right" if (c["how"] != "refused") == (c["golden_net"] > 0) else "wrong") if c["golden_net"] else "neutral"
