@@ -75,3 +75,73 @@ jobs, a worse one on one, and a tie on one. Of the judge's own decisions, one pr
 regression and one let through a regression the tolerance would have stopped. This is too few
 sessions and decisions to estimate the effect. The offline result (18 of 22 decided as golden does)
 is not yet confirmed live.
+
+## Full sessions (20 trials, 3 rounds, 3 turns per trial)
+
+The same four jobs and the same two arms, at full budget. Two fixes are in place:
+- **Both arms:** `--turns-per-trial 3`. At one turn per trial, a turn spent reading used up the
+  turn budget, and sessions ended with trials unspent.
+- **The judge:** it sees the child's ports, as in offline variant 4.
+
+Figures come from `ARBITER-LIVE-full1.json` (`arbiter_live_report.py`, prefix `full1-`). bit_ctrl's
+judge session was still running when this was written. Its row is the design it had kept by then,
+after 10 of its 20 trials.
+
+| job | start | latch alone | latch + judge |
+|---|---|---|---|
+| dc_fsm luna14 | 95.8% edges, 70.9% testpoints | 95.9%, 74.9% (+77 / −84 cells) | **96.1%, 75.4%** (+77 / −4) |
+| sb luna12 | 56.1%, 36.7% | 54.5%, 35.7% (+0 / −1,565) | 55.1%, 35.7% (+460 / −1,566) |
+| byte_ctrl luna12 | 42.7%, 27.0% | 43.3%, 20.0% (+23,797 / −15,853) | 43.4%, 20.0% (+29,439 / −16,171) |
+| bit_ctrl luna12, against gC | 83.5%, 37.6% | 82.4%, 31.0% (+302 / −3,705) | 81.8%, 30.9% (+2,171 / −7,851), interim |
+
+How each session ended:
+- **dc_fsm (both arms) and sb (latch alone): every shipped check passed after round 1.** dc_fsm
+  used 4–5 of its 20 trials; sb latch alone used 2.
+- **sb with the judge** ran all three rounds.
+
+## What the judge changed
+
+Across the 15 live commits the judge decided (smoke and full), its decision is set beside the
+0.5-point tolerance's on the same commit:
+
+| | commits |
+|---|---|
+| judge and tolerance agree | 10 |
+| judge better, scores ±1.00 | 2: kept dc_fsm's 471-cell fix (lost 0.85 points of agreement); refused sb's 9,983-cell regression |
+| judge worse, scores +0.01, +0.24, +0.26 | 3: kept regressions on bit_ctrl (twice) and sb, each losing more than 0.9 points of agreement |
+
+- **Live, the judge changed the latch's decision on 5 commits: net −1.**
+  - Its decisive calls were right; its weak positive calls were wrong.
+  - Over all 15, decisions with a score of 0.4 or more in magnitude were 9 of 9 right. Below
+    0.4 they were 1 of 6.
+  - Letting the judge override the tolerance only with a decisive score would have kept both
+    helps and avoided all three harms here. That rule is chosen after seeing these data; offline
+    a similar cut costs 2 commits. It is not adopted.
+- **Most of the difference between the finals is the sessions' own paths.** They diverge from
+  their first different commit. Where the judge helped, the gain did not survive: dc_fsm's
+  471-cell fix was reverted two commits later.
+
+## What limited both arms more than the judge did
+
+- **Checks that reward the wrong behaviour.** On sb the checks rate the regression up (passing
+  61 → 64). Six real fixes, up to +2,670 / −22 cells, lowered passing requirements, so the latch
+  refused them. The judge never saw them: it is asked only when passing rises. dc_fsm's three
+  remaining modes are required or missed by the checks (`DC-FSM-FINAL-MODES.md`,
+  `DC-FSM-M4-CHECKS.md`).
+- **The agreement rule keeps reversions toward a reading the peers share.** It reverted dc_fsm's
+  fix (+0.84 points, −413 cells), twice re-applied a bit_ctrl regression (−2,850 cells), and kept
+  byte_ctrl's commit 21 (−4,821).
+- **All checks passing ends the session.** dc_fsm and sb stopped after 2–5 trials, still about
+  25% and 64% of testpoints off golden.
+- **Mixed commits.** byte_ctrl and bit_ctrl commits often fix and break thousands of cells at once.
+  Both arms refuse most of them. Many are net positive by golden, but testpoints fall in both arms
+  regardless (byte_ctrl 27.0% → 20.0%).
+
+**Cost.** 5.4M output tokens for the eight sessions at the time of writing: 4.1M editor, 1.3M
+judge. The I2C sessions took 4–6+ hours.
+
+**Verdict.** At full budget, the judge did not measurably change correctness on these four jobs.
+- The finals with it are slightly better on dc_fsm, sb and byte_ctrl, and worse on bit_ctrl.
+- The decisions it changed came out net −1.
+- The larger losses come from the checks and the agreement rule, which the judge is not asked
+  about.
