@@ -84,15 +84,15 @@ The same four jobs and the same two arms, at full budget. Two fixes are in place
 - **The judge:** it sees the child's ports, as in offline variant 4.
 
 Figures come from `ARBITER-LIVE-full1.json` (`arbiter_live_report.py`, prefix `full1-`). bit_ctrl's
-judge session was still running when this was written. Its row is the design it had kept by then,
-after 10 of its 20 trials.
+judge session ran all three rounds (20 trials) and kept nothing after its 10th trial, so its final is
+the design reported while it was still running.
 
 | job | start | latch alone | latch + judge |
 |---|---|---|---|
 | dc_fsm luna14 | 95.8% edges, 70.9% testpoints | 95.9%, 74.9% (+77 / −84 cells) | **96.1%, 75.4%** (+77 / −4) |
 | sb luna12 | 56.1%, 36.7% | 54.5%, 35.7% (+0 / −1,565) | 55.1%, 35.7% (+460 / −1,566) |
 | byte_ctrl luna12 | 42.7%, 27.0% | 43.3%, 20.0% (+23,797 / −15,853) | 43.4%, 20.0% (+29,439 / −16,171) |
-| bit_ctrl luna12, against gC | 83.5%, 37.6% | 82.4%, 31.0% (+302 / −3,705) | 81.8%, 30.9% (+2,171 / −7,851), interim |
+| bit_ctrl luna12, against gC | 83.5%, 37.6% | 82.4%, 31.0% (+302 / −3,705) | 81.8%, 30.9% (+2,171 / −7,851) |
 
 How each session ended:
 - **dc_fsm (both arms) and sb (latch alone): every shipped check passed after round 1.** dc_fsm
@@ -138,8 +138,7 @@ Across the 15 live commits the judge decided (smoke and full), its decision is s
   Both arms refuse most of them. Many are net positive by golden, but testpoints fall in both arms
   regardless (byte_ctrl 27.0% → 20.0%).
 
-**Cost.** 5.4M output tokens for the eight sessions at the time of writing: 4.1M editor, 1.3M
-judge. The I2C sessions took 4–6+ hours.
+**Cost.** 5.5M output tokens for the eight sessions: 4.1M editor, 1.3M judge. The I2C sessions took 4–6+ hours.
 
 **Verdict.** At full budget, the judge did not measurably change correctness on these four jobs.
 - The finals with it are slightly better on dc_fsm, sb and byte_ctrl, and worse on bit_ctrl.

@@ -99,7 +99,8 @@ for job in sys.argv[1:]:
                                    "judge_tokens": None if not a else a.get("tokens"),
                                    "golden_net": g["cells_fixed"] - g["cells_broken"],
                                    "golden_fixed": g["cells_fixed"], "golden_broken": g["cells_broken"]})
-        out["jobs"].append({"run": run, "module": mod, **row})
+        row.update(run=run, module=mod)
+        out["jobs"].append(row)  # the same dict: what is added below (corrected scores) is kept
         if GC is not None:
             fc = FA["compare"](S0, sim(delivered, contract), GC)
             row["corrected"] = {k: fc[k] for k in ("edge_before", "edge_after", "tp_before", "tp_after",
