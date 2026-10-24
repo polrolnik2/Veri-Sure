@@ -1,0 +1,66 @@
+{
+ "start (generated, before repair)": {
+  "flags": [
+   "CI_COMB",
+   "BR_LOAD",
+   "NO_ADDR_UP",
+   "ACK_ABORT",
+   "CI_REFILL",
+   "BR_CI"
+  ],
+  "cells_off_golden": 1818,
+  "residual": 0,
+  "share": {
+   "CI_COMB": 673,
+   "BR_LOAD": 578,
+   "NO_ADDR_UP": 512,
+   "ACK_ABORT": 57,
+   "CI_REFILL": 0,
+   "BR_CI": -1
+  }
+ },
+ "original job's repaired design": {
+  "flags": [
+   "CI_COMB",
+   "BR_LOAD",
+   "NO_ADDR_UP",
+   "DWE_BR"
+  ],
+  "cells_off_golden": 1762,
+  "residual": 0,
+  "share": {
+   "CI_COMB": 677,
+   "BR_LOAD": 578,
+   "NO_ADDR_UP": 512,
+   "DWE_BR": 20
+  }
+ },
+ "full session, latch alone": {
+  "flags": [
+   "CI_COMB",
+   "BR_LOAD",
+   "NO_ADDR_UP"
+  ],
+  "cells_off_golden": 1825,
+  "residual": 82,
+  "share": {
+   "CI_COMB": 677,
+   "BR_LOAD": 578,
+   "NO_ADDR_UP": 512
+  }
+ },
+ "full session, latch + judge": {
+  "flags": [
+   "CI_COMB",
+   "BR_LOAD",
+   "NO_ADDR_UP"
+  ],
+  "cells_off_golden": 1745,
+  "residual": 2,
+  "share": {
+   "CI_COMB": 677,
+   "BR_LOAD": 578,
+   "NO_ADDR_UP": 512
+  }
+ }
+}
