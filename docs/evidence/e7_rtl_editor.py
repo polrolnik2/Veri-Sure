@@ -1,0 +1,320 @@
+"""The RTL Editor testbench: generate RTL, then repair it against the SHIPPED set.
+
+    e7_rtl_editor.py <run-dir> <out-dir> --spec <description.txt>
+                     [--trials N] [--rounds R] [--rtl START.v] [--summary OUT.json]
+                     [--feedback checks|model] [--extra CHILD.v ...] [--include DIR ...]
+                     [--latch checks|consensus --peer PEER.sv ...] [--full-view]
+
+`e6_rtl_debug.py` generalised to any module. What it does, and nothing else:
+
+    RTLGenerator writes rtl.sv from the specification and the run's contract
+    -> for each round: SpecflowReviewer runs the suite and decides the shipped
+       set on the recording -> RTLEditor.chat repairs against what failed
+
+The set is the one the run SHIPPED -- `_frozen_oracles` reads `shipped.json`
+when the run wrote one -- so the editor iterates on the same checks the run's
+scorecard scored. The suite is the one the run rendered. The contract is the
+run's in-force contract (probes folded in), read rather than rebuilt; the old
+driver rebuilt it from bit_ctrl's baseline and could not run another module.
+
+**THE GOLDEN DESIGN IS NOT IN THIS PATH.** No golden source, no golden trace and
+no verdict computed against one reaches the generator or the editor. Grading the
+final RTL against golden is a separate step.
+
+**THE REFERENCE MODEL REACHES THE EDITOR ONLY UNDER `--feedback model`.** The
+cocotb runtime always advances the run's `ref_model.py` in lockstep to record a
+trace. Under `model` -- what every editor run before this flag used -- the editor
+is also handed what the model says: failure rows whose `expected=` is the
+model's value, the testpoint verdict (DUT against model) as its stop condition
+and gradient, and the model's source labelled "the expected behaviour". The
+model is one reading of the specification, not the specification, so under
+`checks` (the default) the editor sees the shipped checks alone: their verdicts
+on its own design's recording, the requirement text, the checks' source, and
+the design's own port values; it stops when no shipped check fails.
+
+**A CHILD IS A LIBRARY.** `--extra` (repeatable) names a pre-made child the
+specification says the design instantiates, and `--include` a header directory.
+They go to the generator's lint gate, the suite's build and the editor's lint,
+and to nothing else. Without them the generator's gate rejected a design that
+instantiated its child as specified ("Cannot find file containing module"), and
+the retry pushed it to write a stand-in child: i2c_master_byte_ctrl, 14 of 14.
+
+**WHAT KEEPS A COMMIT.** `--latch checks` (the default): passing shipped requirements rise.
+`--latch consensus`: the design's agreement with `--peer` designs, generated independently from
+the same specification, rises on the run's own stimulus (`eda_agent/consensus_gate.py`). Audited
+against golden commit by commit, the first is unrelated in direction to golden and the second
+tracks it (docs/evidence/e7/FEEDBACK-AUDIT.md, LATCH-OFFLINE.md). The peers are simulated, never
+shown to the editor. `--full-view` gives the editor the whole design and lets it edit anywhere.
+`--arbiter` (consensus latch only): a commit that raises passing requirements while agreement moves
+too little to decide by goes to a judgment against the specification on the cells it changes
+(`eda_agent/spec_arbiter.py`, docs/evidence/e7/ARBITRATION-OFFLINE.md); its prompts and replies
+are logged under `<out-dir>/spec_arbiter/`.
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import shutil
+import sys
+import time
+from pathlib import Path
+from types import SimpleNamespace
+
+sys.path.insert(0, "/home/user/Veri-Sure")
+
+from eda_agent.config import load_openai_config  # noqa: E402
+from eda_agent.explain import load_requirement_views  # noqa: E402
+from eda_agent.rtl_editor import RTLEditor  # noqa: E402
+from eda_agent.rtl_generator import RTLGenerator  # noqa: E402
+from eda_agent.specflow_node import (SpecflowReviewer,  # noqa: E402
+                                     SpecflowStimulusStager, _frozen_oracles)
+from specflow.integration import describe_oracle  # noqa: E402
+from specflow.model_io import ApiPort  # noqa: E402
+
+
+def _opt(name, default=None):
+    return sys.argv[sys.argv.index(name) + 1] if name in sys.argv else default
+
+
+args = [a for a in sys.argv[1:] if not a.startswith("--")
+        and sys.argv[sys.argv.index(a) - 1] not in
+        ("--spec", "--trials", "--rounds", "--rtl", "--summary", "--feedback",
+         "--extra", "--include", "--latch", "--peer", "--latch-margin", "--latch-tolerance",
+         "--turns-per-trial")]
+if len(args) < 2 or not _opt("--spec"):
+    print(__doc__.strip().splitlines()[2])
+    raise SystemExit(2)
+RUN, OUT = Path(args[0]), Path(args[1])
+SRC = RUN / "specflow" if (RUN / "specflow").is_dir() else RUN
+TRIALS = int(_opt("--trials", 20))
+ROUNDS = int(_opt("--rounds", 3))
+START = _opt("--rtl")
+SUMMARY = Path(_opt("--summary", str(OUT / "editor_summary.json")))
+FEEDBACK = _opt("--feedback", "checks")
+EXTRA = [sys.argv[i + 1] for i, a in enumerate(sys.argv[:-1]) if a == "--extra"]
+INCLUDE = [sys.argv[i + 1] for i, a in enumerate(sys.argv[:-1]) if a == "--include"]
+LATCH = _opt("--latch", "checks")
+#: The smallest agreement rise that latches, in points of edges (default: ConsensusGate.MIN_GAIN).
+MARGIN = _opt("--latch-margin")
+#: The agreement loss a rise in passing requirements may buy, in points (default: TOLERANCE).
+TOLERANCE = _opt("--latch-tolerance")
+PEERS = [sys.argv[i + 1] for i, a in enumerate(sys.argv[:-1]) if a == "--peer"]
+FULL_VIEW = "--full-view" in sys.argv
+ARBITER = "--arbiter" in sys.argv
+#: Agent turns per trial (RTLEditor(turns_per_trial=...)); 1, the default, ends sessions on turns.
+TURNS = float(_opt("--turns-per-trial", 1))
+if LATCH not in ("checks", "consensus") or (LATCH == "consensus" and not PEERS) or (ARBITER and LATCH != "consensus"):
+    print("--latch must be checks or consensus, consensus needs at least one --peer, and --arbiter needs consensus")
+    raise SystemExit(2)
+if FEEDBACK not in SpecflowReviewer.FEEDBACK:
+    print(f"--feedback must be one of {SpecflowReviewer.FEEDBACK}")
+    raise SystemExit(2)
+spec = Path(_opt("--spec")).read_text(encoding="utf-8")
+
+#: A COPY: the loop writes rtl.sv, suite results and verdicts, and a measurement
+#: must not be overwritten by the thing it measures.
+if OUT.exists():
+    shutil.rmtree(OUT)
+(OUT / "specflow").mkdir(parents=True)
+for name in ("oracles.json", "shipped.json", "requirements.json",
+             "normalized.json", "testplan.json", "stimulus.json",
+             "coverage_model.json", "probes.json", "contract.json"):
+    if (SRC / name).is_file():
+        shutil.copy(SRC / name, OUT / "specflow" / name)
+shutil.copy(SRC / "ref_model.py", OUT / "ref_model.py")
+shutil.copytree(SRC / "suite", OUT / "suite", dirs_exist_ok=True)
+for f in (OUT / "suite" / "results").glob("*"):
+    f.unlink()
+
+#: **EVERY MODEL CALL'S USAGE, ONE LINE EACH** -> usage.jsonl, totalled in the
+#: summary. `UsageTrackingModel` counted input, cached and output tokens in memory
+#: and nothing wrote them out, so the editor's prompt-cache rate was the one
+#: number its runs could not report. Hooked at the class: the generator and every
+#: editor model go through it, whatever builds them.
+from eda_agent import model as _model  # noqa: E402
+from eda_agent.model import usage_attr  # noqa: E402
+
+USAGE = OUT / "usage.jsonl"
+PHASE = {"name": "generate"}
+_accumulate = _model.UsageTrackingModel._accumulate_usage
+
+
+def _logged_usage(self, usage) -> None:
+    _accumulate(self, usage)
+    if usage is None:
+        return
+    det = usage_attr(usage, "input_tokens_details") or usage_attr(usage, "prompt_tokens_details")
+    odet = (usage_attr(usage, "output_tokens_details")
+            or usage_attr(usage, "completion_tokens_details"))
+    row = {"t": round(time.time(), 1), "phase": PHASE["name"],
+           "input": int(usage_attr(usage, "input_tokens", 0) or 0),
+           "cached": int(usage_attr(det, "cached_tokens", 0) or 0) if det is not None else 0,
+           "output": int(usage_attr(usage, "output_tokens", 0) or 0),
+           "reasoning": (int(usage_attr(odet, "reasoning_tokens", 0) or 0)
+                         if odet is not None else 0)}
+    with USAGE.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row) + "\n")
+
+
+_model.UsageTrackingModel._accumulate_usage = _logged_usage
+
+
+def _usage_totals() -> dict:
+    rows = [json.loads(line) for line in USAGE.read_text().splitlines()] if USAGE.is_file() else []
+    tot = {k: sum(r[k] for r in rows) for k in ("input", "cached", "output", "reasoning")}
+    tot["calls"] = len(rows)
+    tot["cache_hit_rate"] = round(tot["cached"] / tot["input"], 4) if tot["input"] else None
+    return tot
+
+
+contract = json.loads((OUT / "specflow" / "contract.json").read_text())
+(OUT / "contract.json").write_text(json.dumps(contract, indent=1))
+contract_json = json.dumps(contract)
+cov = json.loads((OUT / "specflow" / "coverage_model.json").read_text())
+oracles = _frozen_oracles(OUT)
+shipped = (OUT / "specflow" / "shipped.json").is_file()
+top = str(contract.get("module_name") or "TopModule")
+n_req = len({o.req_uid for o in oracles})
+print(f"run {RUN}\n{len(oracles)} check bodies over {n_req} requirement(s) "
+      f"from {'shipped.json' if shipped else 'oracles.json (NO shipped set)'}; "
+      f"trials={TRIALS} rounds={ROUNDS} feedback={FEEDBACK}", flush=True)
+
+cfg = load_openai_config()
+port = ApiPort(root=OUT / "agent_io")
+stager = SpecflowStimulusStager(
+    run_dir=OUT, contract=contract, bins=cov.get("bins") or [],
+    suite_dir=OUT / "suite", model_port=port)
+reviewer = SpecflowReviewer(
+    built=SimpleNamespace(suite_dir=OUT / "suite",
+                          refmodel_path=OUT / "ref_model.py",
+                          bins=cov.get("bins") or []),
+    hdl_toplevel=top, output_dir=OUT, stager=stager,
+    extra_sources=EXTRA, include_dirs=INCLUDE,
+    oracles=oracles, contract=contract, feedback=FEEDBACK,
+    requirements=load_requirement_views(OUT, contract))
+rtl_path = OUT / "rtl.sv"
+#: Under `checks` the oracle text is the failing checks, so it is rebuilt after
+#: each review; under `model` it is the model's source, built once as before.
+tb_text = describe_oracle(
+    suite_dir=OUT / "suite", refmodel_path=OUT / "ref_model.py",
+    testplan=json.loads((OUT / "specflow" / "testplan.json").read_text()),
+    max_chars=12000) if FEEDBACK == "model" else None
+history: list[dict] = []
+gate = None
+if LATCH == "consensus":
+    from eda_agent.consensus_gate import ConsensusGate  # noqa: E402
+
+    spec_dir = Path(_opt("--spec")).resolve().parent
+    gate = ConsensusGate.from_run(OUT, [Path(p).read_text(encoding="utf-8") for p in PEERS],
+                                  include_dirs=[*INCLUDE, str(spec_dir), str(spec_dir.parent)],
+                                  extra_sources=EXTRA, workdir=OUT / "consensus_gate",
+                                  min_gain=None if MARGIN is None else float(MARGIN) / 100,
+                                  tolerance=None if TOLERANCE is None else float(TOLERANCE) / 100)
+    print(f"consensus latch: {len(gate.peers)} of {len(PEERS)} peer(s) simulated on "
+          f"{len(gate.tps)} testpoint(s)", flush=True)
+arbiter = None
+if ARBITER:
+    from eda_agent.spec_arbiter import SpecArbiter  # noqa: E402
+
+    #: a child's specification is the description.txt beside its source in the benchmark tree
+    kids = {Path(f).stem: (Path(f).parent / "description.txt").read_text(encoding="utf-8")
+            for f in EXTRA if (Path(f).parent / "description.txt").is_file()}
+    arbiter = SpecArbiter(gate=gate, spec=spec, children=kids,
+                          include_dirs=[*INCLUDE, str(spec_dir), str(spec_dir.parent)], cfg=cfg,
+                          workdir=OUT / "spec_arbiter", child_sources=EXTRA)
+    print(f"spec arbiter: children {sorted(kids) or 'none'}; macros: "
+          f"{arbiter.config.count(chr(10))}", flush=True)
+
+
+def _tally(rnd: int, failing: int) -> dict:
+    decided = reviewer.req_results or {}
+    bad = sorted(u for u, (r, _t) in decided.items() if getattr(r, "ok", None) is False)
+    quiet = sorted(u for u, (r, _t) in decided.items() if getattr(r, "ok", None) is None)
+    row = {"round": rnd, "requirements": len(decided),
+           "pass": len(decided) - len(bad) - len(quiet), "fail": len(bad),
+           "abstain": len(quiet),
+           ("failing_testpoints" if FEEDBACK == "model"
+            else "failing_check_instances"): failing,
+           "failing": bad, "abstaining": quiet,
+           "rtl_lines": len(rtl_path.read_text().splitlines())
+           if rtl_path.is_file() else 0}
+    if gate is not None and rtl_path.is_file():
+        row["agreement"] = gate.agreement(rtl_path.read_text())
+    history.append(row)
+    print(f"\nROUND {rnd}: {row['pass']} pass, {row['fail']} FAIL, "
+          f"{row['abstain']} abstain of {row['requirements']} requirement(s); "
+          f"{failing} {'failing testpoint(s)' if FEEDBACK == 'model' else 'failing check instance(s)'}",
+          flush=True)
+    if bad:
+        print(f"  failing: {', '.join(bad[:16])}{' ...' if len(bad) > 16 else ''}",
+              flush=True)
+    return row
+
+
+async def _drive() -> None:
+    global tb_text
+    remaining = TRIALS
+    if START:
+        rtl_path.write_text(Path(START).read_text(encoding="utf-8"), encoding="utf-8")
+    else:
+        ok, code = await RTLGenerator(cfg).chat(
+            input_spec=spec, testbench="", interface="",
+            rtl_path=str(rtl_path), contract_json=contract_json,
+            extra_sources=EXTRA, include_dirs=INCLUDE)
+        if not ok or not code.strip():
+            print("RTL generation produced nothing", flush=True)
+            raise SystemExit(1)
+        rtl_path.write_text(code, encoding="utf-8")
+        shutil.copy(rtl_path, OUT / "rtl_generated.sv")
+        print(f"generated rtl.sv ({len(code.splitlines())} lines)", flush=True)
+
+    for rnd in range(ROUNDS + 1):
+        is_pass, failing, sim_output = reviewer.review()
+        row = _tally(rnd, failing)
+        if is_pass or row["fail"] == 0 or not remaining or rnd == ROUNDS:
+            break
+        PHASE["name"] = f"edit-r{rnd}"
+        if FEEDBACK == "checks":
+            tb_text = reviewer.describe(max_chars=12000)
+        editor = RTLEditor(cfg, sim_reviewer=reviewer, max_trials=remaining,
+                           stimulus_stager=stager,
+                           requirements=load_requirement_views(OUT, contract),
+                           contract=contract, latch_rule=LATCH, latch_gate=gate,
+                           latch_arbiter=arbiter, full_view=FULL_VIEW, turns_per_trial=TURNS)
+        _, repaired, used, _ = await editor.chat(
+            spec=spec, output_dir_per_run=str(OUT), sim_failed_log=sim_output,
+            sim_mismatch_cnt=failing, contract_json=contract_json,
+            max_trials=remaining, tb_text=tb_text, tb_clip_chars=12000)
+        remaining -= max(1, int(used))
+        row["editor_trials_used"] = int(used)
+        print(f"  editor used {used} trial(s); {remaining} left", flush=True)
+        if repaired.strip():
+            rtl_path.write_text(repaired, encoding="utf-8")
+
+
+t0 = time.time()
+asyncio.run(_drive())
+#: **THE SHIPPED MODULE HAS THE REFERENCE INTERFACE.** The contract makes every
+#: probe a port, so the repaired rtl.sv carries them; `deliverable` wraps it
+#: under the specification's own interface with probes unconnected, and that
+#: is what a grader compiles. See `eda_agent/strip_probes.deliverable`.
+from eda_agent.strip_probes import deliverable  # noqa: E402
+
+shipped_rtl = deliverable(rtl_path.read_text(encoding="utf-8"), contract)
+if shipped_rtl:
+    (OUT / "rtl_deliverable.sv").write_text(shipped_rtl, encoding="utf-8")
+SUMMARY.write_text(json.dumps({
+    "run": str(RUN), "module": top, "bodies": len(oracles),
+    "requirements": n_req, "set": "shipped" if shipped else "oracles",
+    "trials": TRIALS, "rounds": ROUNDS, "feedback": FEEDBACK,
+    "latch": LATCH, "peers": PEERS, "full_view": FULL_VIEW, "arbiter": ARBITER, "turns_per_trial": TURNS,
+    "latch_margin_points": None if gate is None else 100 * gate.min_gain,
+    "latch_tolerance_points": None if gate is None else 100 * gate.tolerance,
+    "extra_sources": EXTRA, "include_dirs": INCLUDE,
+    "seconds": round(time.time() - t0),
+    "history": history, "final": history[-1] if history else None,
+    "usage": _usage_totals(),
+}, indent=2) + "\n")
+print(f"\nFINAL rtl.sv: {len(rtl_path.read_text().splitlines())} lines; "
+      f"summary {SUMMARY}", flush=True)
+print(f"USAGE {json.dumps(_usage_totals())}", flush=True)

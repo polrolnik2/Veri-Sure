@@ -1,0 +1,11 @@
+--- gen /home/user/runs/luna12/or1200_dc_fsm gen3 start 2026-10-15T09:39:06Z on 187ef94
+== RTL editor
+   
+   ROUND 0: 70 pass, 7 FAIL, 3 abstain of 80 requirement(s); 24 failing testpoint(s)
+     failing: REQ-0009, REQ-0030, REQ-0038, REQ-0041, REQ-0054, REQ-0094, REQ-0095
+   
+   FINAL rtl.sv: 312 lines; summary /home/user/runs/luna12/results/or1200_dc_fsm/gen3/editor_summary.json
+   USAGE {"input": 9752, "cached": 0, "output": 11937, "reasoning": 0, "calls": 1, "cache_hit_rate": 0.0}
+   -> exit 0 (log /home/user/runs/luna12/results/or1200_dc_fsm/gen3/editor.log)
+== ChipVerilog verdict: function_fail (equivalence, bounded_seq)
+--- gen exited 0 at 2026-10-15T09:43:37Z

@@ -1,0 +1,160 @@
+"""Everything after a run is packed, for one module, in one command.
+
+    e7_module.py <runs-root> <module> [--trials N] [--rounds R] [--rtl START.sv]
+                 [--skip-editor | --editor-only] [--tag NAME]
+                 [--feedback checks|model] [--latch checks|consensus --peer PEER.sv ...] [--full-view]
+
+Reads `<runs-root>/<module>` (the run) and `<runs-root>/corpora/<module>-ok`
+(the corpus `e6_autorun.py` packed), writes `<runs-root>/results/<module>/`:
+
+    1  GOLDEN REPLAY   `e6_replay_corpus.py` -- the known-good design simulated
+                       through a suite regenerated from this corpus's own
+                       stimulus. Children (`i2c_master_byte_ctrl` instantiates
+                       `i2c_master_bit_ctrl`) and headers are supplied to the
+                       simulator only. Golden is RUN, never read.
+    2  THE TRIPLE      `e7_score_run.py` -- span, blindness and audit of the set
+                       the run SHIPPED, with the pipeline's own rules and no
+                       others. -> score.json
+    3  RTL EDITOR      `e7_rtl_editor.py` -- RTLGenerator writes rtl.sv from the
+                       specification and contract, then RTLEditor repairs it
+                       against the shipped set, iterating on the testbench's
+                       failures. Golden is not in this path. -> editor_summary.json
+    4  VERDICT         `benchmarks/score_chipverilog.py` -- ChipVerilog's own
+                       compile gate + equivalence/simulation flow on the final
+                       rtl.sv. -> chipverilog.json
+
+Each step logs to its own file beside the JSON; a failed step is reported and
+the later steps that do not depend on it still run. `--skip-editor` runs 1-2
+only; `--editor-only` runs 3-4 only, for a run whose replay and triple are
+already scored (the editor reads the run, not the golden replay).
+
+`--tag NAME` keeps a second editor job on the same run apart from the first:
+its working directory is `<runs-root>/editor-NAME/<module>`, its JSON and logs go
+to `results/<module>/NAME/`, and its deliverable to `deliverable/NAME/<module>`.
+`--rounds 0 --tag gen1` is GENERATION ONLY: the generator writes rtl.sv, the
+shipped set reviews it once, and no repair runs -- the editor's ablation.
+
+`--feedback` is passed to the editor: `checks` (its default) repairs against the
+shipped checks alone, `model` also hands it the reference model's values and
+source, as every editor run before the flag did. See `e7_rtl_editor.py`.
+
+A module with children (`i2c_master_byte_ctrl`) has them, and the task's header
+directories, passed to the editor as `--extra`/`--include`; one without children
+gets neither, so its jobs lint exactly as before.
+"""
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent.parent
+DES = ROOT / "benchmarks" / "chipverilog" / "Des"
+
+
+def _opt(name, default=None):
+    return sys.argv[sys.argv.index(name) + 1] if name in sys.argv else default
+
+
+def _task(module: str) -> Path:
+    hits = [p.parent for p in DES.rglob("description.txt") if p.parent.name == module]
+    if not hits:
+        raise SystemExit(f"no ChipVerilog task named {module!r}")
+    return hits[0]
+
+
+def _step(name: str, argv: list[str], log: Path) -> bool:
+    print(f"== {name}", flush=True)
+    with log.open("w") as fh:
+        rc = subprocess.run(argv, cwd=str(ROOT), stdout=fh, stderr=subprocess.STDOUT).returncode
+    tail = log.read_text(errors="replace").strip().splitlines()[-6:]
+    for line in tail:
+        print(f"   {line[:200]}", flush=True)
+    print(f"   -> exit {rc} (log {log})", flush=True)
+    return rc == 0
+
+
+def main() -> int:
+    pos = [a for a in sys.argv[1:] if not a.startswith("--")
+           and sys.argv[sys.argv.index(a) - 1] not in ("--trials", "--rounds", "--rtl", "--tag",
+                                                       "--feedback", "--latch", "--peer",
+                                                       "--latch-margin", "--latch-tolerance",
+                                                       "--turns-per-trial")]
+    if len(pos) < 2:
+        print(__doc__.strip().splitlines()[2])
+        return 2
+    runs, module = Path(pos[0]).resolve(), pos[1]
+    run, corpus = runs / module, runs / "corpora" / f"{module}-ok"
+    gold, res = runs / "gold" / module, runs / "results" / module
+    tag = _opt("--tag")
+    editor = runs / (f"editor-{tag}" if tag else "editor") / module
+    res.mkdir(parents=True, exist_ok=True)
+    #: The editor's JSON and logs; the replay and triple stay in `res`.
+    res_ed = res / tag if tag else res
+    res_ed.mkdir(parents=True, exist_ok=True)
+    task = _task(module)
+    golden = task / f"{module}.v"
+    sys.path.insert(0, str(ROOT / "benchmarks"))
+    from run_chipverilog import child_sources, submodules  # noqa: E402
+    extras = [str(p) for p in child_sources(submodules(task, module))]
+
+    py = sys.executable
+    if "--editor-only" in sys.argv:
+        ok_gold = False
+    else:
+        ok_gold = _step("golden replay", [py, str(HERE / "e6_replay_corpus.py"), str(corpus),
+                                          str(golden), str(gold)]
+                        + [a for e in extras for a in ("--extra", e)],
+                        res / "replay.log")
+    if ok_gold:
+        _step("the triple of the shipped set", [py, str(HERE / "e7_score_run.py"),
+                                                str(corpus), str(gold), "--json",
+                                                str(res / "score.json")],
+              res / "score.log")
+    if "--skip-editor" in sys.argv:
+        return 0
+    ok_ed = _step("RTL editor", [py, str(HERE / "e7_rtl_editor.py"), str(run), str(editor),
+                                 "--spec", str(task / "description.txt"),
+                                 "--trials", _opt("--trials", "20"),
+                                 "--rounds", _opt("--rounds", "3"),
+                                 #: `--rtl`: resume from a given rtl.sv instead of generating one
+                                 #: (a run cut short by a provider error, with its remaining budget).
+                                 *(["--rtl", _opt("--rtl")] if _opt("--rtl") else []),
+                                 *(["--feedback", _opt("--feedback")] if _opt("--feedback") else []),
+                                 #: `--latch consensus --peer X ...` and `--full-view`: see e7_rtl_editor.py
+                                 *(["--latch", _opt("--latch")] if _opt("--latch") else []),
+                                 *(["--latch-margin", _opt("--latch-margin")] if _opt("--latch-margin") else []),
+                                 *(["--latch-tolerance", _opt("--latch-tolerance")]
+                                   if _opt("--latch-tolerance") else []),
+                                 *[a for i, x in enumerate(sys.argv[:-1]) if x == "--peer"
+                                   for a in ("--peer", sys.argv[i + 1])],
+                                 *(["--full-view"] if "--full-view" in sys.argv else []),
+                                 *(["--arbiter"] if "--arbiter" in sys.argv else []),
+                                 *(["--turns-per-trial", _opt("--turns-per-trial")]
+                                   if _opt("--turns-per-trial") else []),
+                                 *[a for e in extras for a in ("--extra", e)],
+                                 *([a for d in (task, task.parent) for a in ("--include", str(d))]
+                                   if extras else []),
+                                 "--summary", str(res_ed / "editor_summary.json")],
+                  res_ed / "editor.log")
+    if ok_ed or (editor / "rtl.sv").is_file():
+        import shutil
+
+        from score_chipverilog import score  # noqa: E402 -- benchmarks/ is on the path
+        #: Graded on the DELIVERABLE -- the reference interface, probes
+        #: unconnected -- which the scorer expects to find as `rtl.sv`.
+        ship = runs / "deliverable" / (tag or "") / module
+        ship.mkdir(parents=True, exist_ok=True)
+        src = editor / "rtl_deliverable.sv"
+        shutil.copy(src if src.is_file() else editor / "rtl.sv", ship / "rtl.sv")
+        verdict = score(ship, module)
+        (res_ed / "chipverilog.json").write_text(json.dumps(verdict, indent=2) + "\n")
+        print(f"== ChipVerilog verdict: {verdict.get('status')} "
+              f"({verdict.get('flow')}, {verdict.get('proof_type')})", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

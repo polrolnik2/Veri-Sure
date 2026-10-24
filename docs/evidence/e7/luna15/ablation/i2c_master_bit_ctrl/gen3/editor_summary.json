@@ -1,0 +1,68 @@
+{
+  "run": "/home/user/runs/luna15/i2c_master_bit_ctrl",
+  "module": "i2c_master_bit_ctrl",
+  "bodies": 108,
+  "requirements": 106,
+  "set": "shipped",
+  "trials": 20,
+  "rounds": 0,
+  "seconds": 453,
+  "history": [
+    {
+      "round": 0,
+      "requirements": 106,
+      "pass": 95,
+      "fail": 3,
+      "abstain": 8,
+      "failing_testpoints": 294,
+      "failing": [
+        "REQ-0033",
+        "REQ-0121",
+        "REQ-0137"
+      ],
+      "abstaining": [
+        "REQ-0002",
+        "REQ-0007",
+        "REQ-0022",
+        "REQ-0027",
+        "REQ-0030",
+        "REQ-0105",
+        "REQ-0111",
+        "REQ-0130"
+      ],
+      "rtl_lines": 345
+    }
+  ],
+  "final": {
+    "round": 0,
+    "requirements": 106,
+    "pass": 95,
+    "fail": 3,
+    "abstain": 8,
+    "failing_testpoints": 294,
+    "failing": [
+      "REQ-0033",
+      "REQ-0121",
+      "REQ-0137"
+    ],
+    "abstaining": [
+      "REQ-0002",
+      "REQ-0007",
+      "REQ-0022",
+      "REQ-0027",
+      "REQ-0030",
+      "REQ-0105",
+      "REQ-0111",
+      "REQ-0130"
+    ],
+    "rtl_lines": 345
+  },
+  "usage": {
+    "input": 11720,
+    "cached": 0,
+    "output": 12250,
+    "reasoning": 0,
+    "calls": 1,
+    "cache_hit_rate": 0.0
+  }
+}

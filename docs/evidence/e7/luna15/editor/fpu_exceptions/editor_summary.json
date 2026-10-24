@@ -1,0 +1,155 @@
+{
+  "run": "/home/user/runs/luna15/fpu_exceptions",
+  "module": "fpu_exceptions",
+  "bodies": 143,
+  "requirements": 143,
+  "set": "shipped",
+  "trials": 20,
+  "rounds": 3,
+  "seconds": 10416,
+  "history": [
+    {
+      "round": 0,
+      "requirements": 143,
+      "pass": 128,
+      "fail": 6,
+      "abstain": 9,
+      "failing_testpoints": 76,
+      "failing": [
+        "REQ-0019",
+        "REQ-0126",
+        "REQ-0136",
+        "REQ-0143",
+        "REQ-0152",
+        "REQ-0161"
+      ],
+      "abstaining": [
+        "REQ-0009",
+        "REQ-0013",
+        "REQ-0015",
+        "REQ-0018",
+        "REQ-0039",
+        "REQ-0053",
+        "REQ-0114",
+        "REQ-0165",
+        "REQ-0170"
+      ],
+      "rtl_lines": 432,
+      "editor_trials_used": 1
+    },
+    {
+      "round": 1,
+      "requirements": 143,
+      "pass": 128,
+      "fail": 6,
+      "abstain": 9,
+      "failing_testpoints": 76,
+      "failing": [
+        "REQ-0019",
+        "REQ-0126",
+        "REQ-0136",
+        "REQ-0143",
+        "REQ-0152",
+        "REQ-0161"
+      ],
+      "abstaining": [
+        "REQ-0009",
+        "REQ-0013",
+        "REQ-0015",
+        "REQ-0018",
+        "REQ-0039",
+        "REQ-0053",
+        "REQ-0114",
+        "REQ-0165",
+        "REQ-0170"
+      ],
+      "rtl_lines": 433,
+      "editor_trials_used": 3
+    },
+    {
+      "round": 2,
+      "requirements": 143,
+      "pass": 128,
+      "fail": 6,
+      "abstain": 9,
+      "failing_testpoints": 76,
+      "failing": [
+        "REQ-0019",
+        "REQ-0126",
+        "REQ-0136",
+        "REQ-0143",
+        "REQ-0152",
+        "REQ-0161"
+      ],
+      "abstaining": [
+        "REQ-0009",
+        "REQ-0013",
+        "REQ-0015",
+        "REQ-0018",
+        "REQ-0039",
+        "REQ-0053",
+        "REQ-0114",
+        "REQ-0165",
+        "REQ-0170"
+      ],
+      "rtl_lines": 436,
+      "editor_trials_used": 0
+    },
+    {
+      "round": 3,
+      "requirements": 143,
+      "pass": 128,
+      "fail": 6,
+      "abstain": 9,
+      "failing_testpoints": 76,
+      "failing": [
+        "REQ-0019",
+        "REQ-0126",
+        "REQ-0136",
+        "REQ-0143",
+        "REQ-0152",
+        "REQ-0161"
+      ],
+      "abstaining": [
+        "REQ-0009",
+        "REQ-0013",
+        "REQ-0015",
+        "REQ-0018",
+        "REQ-0039",
+        "REQ-0053",
+        "REQ-0114",
+        "REQ-0165",
+        "REQ-0170"
+      ],
+      "rtl_lines": 436
+    }
+  ],
+  "final": {
+    "round": 3,
+    "requirements": 143,
+    "pass": 128,
+    "fail": 6,
+    "abstain": 9,
+    "failing_testpoints": 76,
+    "failing": [
+      "REQ-0019",
+      "REQ-0126",
+      "REQ-0136",
+      "REQ-0143",
+      "REQ-0152",
+      "REQ-0161"
+    ],
+    "abstaining": [
+      "REQ-0009",
+      "REQ-0013",
+      "REQ-0015",
+      "REQ-0018",
+      "REQ-0039",
+      "REQ-0053",
+      "REQ-0114",
+      "REQ-0165",
+      "REQ-0170"
+    ],
+    "rtl_lines": 436
+  }
+}

@@ -1,0 +1,11 @@
+--- editor /home/user/runs/luna13/or1200_dc_fsm start 2026-10-12T14:05:49Z on fbf35f2
+== RTL editor
+                                                           **************************************************************************************
+   - :0: Verilog $finish
+   
+   ROUND 1: 84 pass, 0 FAIL, 0 abstain of 84 requirement(s); 0 failing testpoint(s)
+   
+   FINAL rtl.sv: 266 lines; summary /home/user/runs/luna13/results/or1200_dc_fsm/editor_summary.json
+   -> exit 0 (log /home/user/runs/luna13/results/or1200_dc_fsm/editor.log)
+== ChipVerilog verdict: function_fail (equivalence, bounded_seq)
+--- editor exited 0 at 2026-10-12T14:38:13Z

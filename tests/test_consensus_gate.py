@@ -1,0 +1,223 @@
+"""The consensus latch: agreement with independently generated designs decides whether a commit is kept."""
+import shutil
+from pathlib import Path
+
+import pytest
+
+from eda_agent.consensus_gate import ConsensusGate
+from eda_agent.rtl_editor import (EXTRA_ORDER_PROMPT, EXTRA_ORDER_PROMPT_CHECKS, RTLEditor, _EditSession,
+                                  workflow_prompt)
+
+needs_iverilog = pytest.mark.skipif(shutil.which("iverilog") is None, reason="iverilog not installed")
+
+CONTRACT = {"module_name": "cnt", "clocking": {"clock": {"name": "clk"}},
+            "io": [{"name": "clk", "dir": "input", "width": 1},
+                   {"name": "rst", "dir": "input", "width": 1},
+                   {"name": "en", "dir": "input", "width": 1},
+                   {"name": "q", "dir": "output", "width": 2}]}
+
+
+def counter(step: int, name: str = "cnt") -> str:
+    return f"""module {name}(input clk, input rst, input en, output reg [1:0] q);
+  always @(posedge clk) if (rst) q <= 2'd0; else if (en) q <= q + 2'd{step};
+endmodule
+"""
+
+
+#: rows carry every contract input in declaration order: clk, rst, en
+ROWS = {"TP-0000": [[0, 0, 1]] * 6 + [[0, 0, 0]] * 2, "TP-0001": [[0, 0, 1], [0, 0, 0], [0, 0, 1]] * 3}
+
+
+@pytest.fixture
+def gate(tmp_path):
+    return ConsensusGate(contract=CONTRACT, rows_by_tp=ROWS, peers=[counter(1), counter(1)], workdir=tmp_path)
+
+
+@needs_iverilog
+def test_a_design_that_behaves_like_the_peers_agrees_fully(gate):
+    assert len(gate.peers) == 2
+    assert gate.agreement(counter(1)) == pytest.approx(1.0)
+    assert gate.agreement(counter(2)) < 1.0
+
+
+@needs_iverilog
+def test_judge_reports_direction_and_the_outputs_that_moved_away(gate):
+    up = gate.judge(counter(2), counter(1))
+    assert up["rises"] and up["after"] > up["before"] and up["peers"] == 2
+    down = gate.judge(counter(1), counter(2))
+    assert not down["rises"] and down["outputs_moved_away"] == ["q"]
+    same = gate.judge(counter(1), counter(1))
+    assert not same["rises"], "a tie does not latch"
+    assert same["behaviour_changed"] is False and down["behaviour_changed"] is True
+
+
+@needs_iverilog
+def test_a_rise_below_the_margin_does_not_latch(tmp_path):
+    g = ConsensusGate(contract=CONTRACT, rows_by_tp=ROWS, peers=[counter(1), counter(1)], workdir=tmp_path,
+                      min_gain=1.0)
+    j = g.judge(counter(2), counter(1))
+    assert j["after"] > j["before"] and not j["rises"]
+    assert ConsensusGate.MIN_GAIN == pytest.approx(0.001)
+    assert ConsensusGate.TOLERANCE == pytest.approx(0.005) and j["tolerance"] == pytest.approx(0.005)
+
+
+def test_the_margin_is_named_when_a_small_rise_is_refused(tmp_path):
+    s = _session(tmp_path)
+    c = {"peers": 3, "before": 0.6, "after": 0.6005, "rises": False, "outputs_moved_away": [],
+         "behaviour_changed": True, "min_gain": 0.001}
+    r = s._consensus_decision({}, c, None, None, "old", 2, None, "{}")
+    assert "0.1-point margin" in r["error_msg"] and "at least 0.1 points" in r["error_msg"]
+
+
+@needs_iverilog
+def test_a_design_that_does_not_compile_never_latches(gate):
+    assert gate.agreement("module cnt(input clk; endmodule") is None
+    assert not gate.judge(counter(1), "module cnt(input clk; endmodule")["rises"]
+
+
+@needs_iverilog
+def test_an_already_wrapped_deliverable_is_simulated_as_is(gate):
+    wrapped = counter(1, "cnt__probed") + """module cnt(input clk, input rst, input en, output [1:0] q);
+  cnt__probed u(.clk(clk), .rst(rst), .en(en), .q(q));
+endmodule
+"""
+    assert gate.agreement(wrapped) == pytest.approx(1.0)
+
+
+class _Gate:
+    def __init__(self, before, after):
+        self.v = {"old": before, "new": after}
+
+    def judge(self, before, after):
+        a0, a1 = self.v.get(before), self.v.get(after)
+        return {"peers": 3, "before": a0, "after": a1, "rises": a1 > a0, "outputs_moved_away": ["q"]}
+
+
+def _session(tmp_path, rtl="new"):
+    p = tmp_path / "rtl.sv"
+    p.write_text(rtl)
+    s = _EditSession(tb_path=None, rtl_path=str(p), output_dir=str(tmp_path), last_mismatch_cnt=5,
+                     sim_reviewer=None, max_trials=3)
+    s.latch_rule = "consensus"
+    return s
+
+
+def test_a_commit_that_raises_agreement_latches(tmp_path):
+    s = _session(tmp_path)
+    c = _Gate(0.5, 0.6).judge("old", "new")
+    r = s._consensus_decision({}, c, None, None, "old", 0, None, "{}", is_sim_pass=True)
+    assert r["is_action_executed"] and r["accept_reason"].startswith("LATCHED ON AGREEMENT")
+    assert s.accepted_agreement == pytest.approx(0.6)
+    assert Path(s.rtl_path).read_text() == "new"
+
+
+def test_a_commit_that_lowers_agreement_is_reverted_whatever_the_checks_say(tmp_path):
+    s = _session(tmp_path)
+    c = _Gate(0.6, 0.5).judge("old", "new")
+    both = ({"REQ-1"}, {"REQ-2"}, set()), ({"REQ-1", "REQ-2"}, set(), set())  # the checks: 1 -> 2 passing
+    r = s._consensus_decision({}, c, both[0], both[1], "old", 2, None, "{}")
+    assert not r.get("is_action_executed")
+    assert "did NOT latch" in r["error_msg"] and "passing requirements 1 -> 2" in r["error_msg"]
+    assert "moved AWAY" in r["error_msg"] and "q" in r["error_msg"]
+    assert Path(s.rtl_path).read_text() == "old"
+
+
+def _judged(before, after, tol=0.005):
+    return {"peers": 3, "before": before, "after": after, "rises": after >= before + 0.001,
+            "outputs_moved_away": ["q"], "behaviour_changed": True, "min_gain": 0.001, "tolerance": tol}
+
+
+PASS_UP = ({"REQ-1"}, {"REQ-2"}, set()), ({"REQ-1", "REQ-2"}, set(), set())
+PASS_SAME = ({"REQ-1"}, {"REQ-2"}, set()), ({"REQ-1"}, {"REQ-2"}, set())
+
+
+def test_a_check_gain_buys_a_small_agreement_loss(tmp_path):
+    """dc_fsm luna14: real fixes moved 0.02-0.85 points away from peers sharing the defect."""
+    s = _session(tmp_path)
+    r = s._consensus_decision({}, _judged(0.9981, 0.9978), *PASS_UP, "old", 0, None, "{}", is_sim_pass=True)
+    assert r["is_action_executed"] and "WITHIN TOLERANCE" in r["accept_reason"]
+    assert s.best_rtl == "new" and s.best_agreement == pytest.approx(0.9978), "best is the last latched"
+
+
+def test_a_check_gain_does_not_buy_a_large_agreement_loss(tmp_path):
+    """sb luna14: the configuration line raised passing 28 -> 65 and dropped agreement 99% -> 38%."""
+    s = _session(tmp_path)
+    r = s._consensus_decision({}, _judged(0.9916, 0.3807), *PASS_UP, "old", 2, None, "{}")
+    assert not r.get("is_action_executed") and Path(s.rtl_path).read_text() == "old"
+
+
+def test_without_a_check_gain_a_small_loss_is_refused(tmp_path):
+    s = _session(tmp_path)
+    r = s._consensus_decision({}, _judged(0.9981, 0.9978), *PASS_SAME, "old", 2, None, "{}")
+    assert not r.get("is_action_executed")
+
+
+def test_a_batch_that_changes_no_output_is_told_so(tmp_path):
+    s = _session(tmp_path)
+    c = {"peers": 3, "before": 0.6, "after": 0.6, "rises": False, "outputs_moved_away": [],
+         "behaviour_changed": False}
+    r = s._consensus_decision({}, c, None, None, "old", 2, None, "{}")
+    assert "changed NO spec output" in r["error_msg"]
+
+
+def test_resubmitting_a_refused_behaviour_is_named(tmp_path):
+    s = _session(tmp_path)
+    c = {"peers": 3, "before": 0.6, "after": 0.5, "rises": False, "outputs_moved_away": [],
+         "behaviour_changed": True, "min_gain": 0.001, "after_behaviour": "abc"}
+    first = s._consensus_decision({}, dict(c), None, None, "old", 2, None, "{}")
+    assert "EXACTLY like" not in first["error_msg"]
+    again = s._consensus_decision({}, dict(c), None, None, "old", 2, None, "{}")
+    assert "EXACTLY like the one refused" in again["error_msg"]
+
+
+def test_a_repeat_of_refused_behaviour_is_refused_without_a_trial(tmp_path):
+    s = _session(tmp_path)
+    s.latch_gate = type("G", (), {"fingerprint": staticmethod(lambda rtl: "abc"), "min_gain": 0.001})()
+    s.refused_behaviours = {"abc": 2}
+    s.staged_rtl = "same behaviour"
+    r = s.commit()
+    assert "NO TRIAL WAS CHARGED" in r["error_msg"] and s.action_calls == 0
+
+
+@needs_iverilog
+def test_designs_that_behave_alike_share_a_fingerprint(gate):
+    a = gate.judge(counter(2), counter(1))["after_behaviour"]
+    b = gate.judge(counter(2), counter(1, "cnt") + "// a comment\n")["after_behaviour"]
+    assert a and a == b
+    assert gate.judge(counter(1), counter(2))["after_behaviour"] != a
+
+
+def test_best_is_ranked_on_agreement_under_the_consensus_latch(tmp_path):
+    s = _session(tmp_path)
+    assert s.note_best(5, "a", passing=10, agreement=0.5)
+    assert not s.note_best(1, "b", passing=20, agreement=0.4), "more checks passing, less agreement"
+    assert not s.note_best(1, "c", passing=20, agreement=0.5), "a tie keeps the earliest"
+    assert s.best_rtl == "a" and s.best_agreement == pytest.approx(0.5)
+
+
+def test_a_design_refused_for_the_margin_never_becomes_best(tmp_path):
+    """The second live smoke run shipped a design the latch had refused (sb luna12)."""
+    s = _session(tmp_path)
+    s.latch_gate = type("G", (), {"min_gain": 0.001})()
+    assert s.note_best(5, "start", passing=61, agreement=0.8604)
+    assert not s.note_best(5, "refused", passing=64, agreement=0.8612), "+0.08 points is under the margin"
+    assert s.best_rtl == "start"
+    assert s.note_best(5, "kept", passing=64, agreement=0.8620)
+    assert s.best_rtl == "kept"
+
+
+def test_workflow_prompt_says_what_the_run_does():
+    assert workflow_prompt(True) == EXTRA_ORDER_PROMPT_CHECKS
+    assert workflow_prompt(False) == EXTRA_ORDER_PROMPT
+    full = workflow_prompt(True, full_view=True)
+    assert "_tool_read_design()" in full and "MUST only modify code inside suspect blocks" not in full
+    assert "Only modify code inside suspect blocks." not in full
+    cons = workflow_prompt(True, latch_rule="consensus")
+    assert "INDEPENDENTLY" in cons and "If it improves, the batch is latched." not in cons
+
+
+def test_the_consensus_latch_needs_a_gate():
+    with pytest.raises(ValueError):
+        RTLEditor(None, sim_reviewer=None, latch_rule="consensus")
+    with pytest.raises(ValueError):
+        RTLEditor(None, sim_reviewer=None, latch_rule="majority")

@@ -1,0 +1,76 @@
+{
+  "run": "/home/user/runs/luna12/or1200_dc_fsm",
+  "module": "or1200_dc_fsm",
+  "bodies": 80,
+  "requirements": 80,
+  "set": "shipped",
+  "trials": 20,
+  "rounds": 0,
+  "seconds": 274,
+  "history": [
+    {
+      "round": 0,
+      "requirements": 80,
+      "pass": 65,
+      "fail": 2,
+      "abstain": 13,
+      "failing_testpoints": 26,
+      "failing": [
+        "REQ-0022",
+        "REQ-0036"
+      ],
+      "abstaining": [
+        "REQ-0002",
+        "REQ-0028",
+        "REQ-0030",
+        "REQ-0031",
+        "REQ-0032",
+        "REQ-0063",
+        "REQ-0083",
+        "REQ-0090",
+        "REQ-0094",
+        "REQ-0095",
+        "REQ-0096",
+        "REQ-0097",
+        "REQ-0098"
+      ],
+      "rtl_lines": 277
+    }
+  ],
+  "final": {
+    "round": 0,
+    "requirements": 80,
+    "pass": 65,
+    "fail": 2,
+    "abstain": 13,
+    "failing_testpoints": 26,
+    "failing": [
+      "REQ-0022",
+      "REQ-0036"
+    ],
+    "abstaining": [
+      "REQ-0002",
+      "REQ-0028",
+      "REQ-0030",
+      "REQ-0031",
+      "REQ-0032",
+      "REQ-0063",
+      "REQ-0083",
+      "REQ-0090",
+      "REQ-0094",
+      "REQ-0095",
+      "REQ-0096",
+      "REQ-0097",
+      "REQ-0098"
+    ],
+    "rtl_lines": 277
+  },
+  "usage": {
+    "input": 9752,
+    "cached": 0,
+    "output": 12210,
+    "reasoning": 0,
+    "calls": 1,
+    "cache_hit_rate": 0.0
+  }
+}

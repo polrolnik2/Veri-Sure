@@ -13,7 +13,29 @@ class OpenAIConfig:
     base_url: str | None = None
     organization: str | None = None
     reasoning_effort: str | None = None
+    #: Which OpenAI surface to call: "chat" (/v1/chat/completions) or
+    #: "responses" (/v1/responses). Not cosmetic -- a gateway may refuse
+    #: function tools together with reasoning effort on chat-completions and
+    #: direct callers to Responses, which is the only way a tool-using agent
+    #: gets a reasoning budget at all. Defaults to "chat" so nothing changes
+    #: surface without being told to.
+    api_flavor: str = "chat"
     stream: bool = False
+    #: Per-attempt client timeout, in seconds. A RUNTIME SWITCH rather than an
+    #: environment read, because it decides whether a long generation survives
+    #: and a run must be able to say what it used.
+    #:
+    #: The default is the one that has been in force, and it is BINDING on this
+    #: gateway rather than theoretical. Measured on or1200_dc_fsm at xhigh with
+    #: a 128000-token ceiling: the stream dropped at 662.4s having emitted
+    #: 10,082 events with a largest inter-event gap of 9.9s and first content at
+    #: 312.4s. Nothing was idle and nothing was truncated -- the request was
+    #: healthy and simply ran past the client's own 600s bound.
+    #:
+    #: specflow never meets this because chunking bounds each call's DURATION:
+    #: a slice returns long before 600s and the continuation starts a fresh
+    #: request. An unchunked caller has no such bound and needs a bigger one.
+    timeout_s: float = 600.0
     generate_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
@@ -24,17 +46,33 @@ def load_openai_config(
     base_url: str | None = None,
     organization: str | None = None,
     reasoning_effort: str | None = None,
+    api_flavor: str | None = None,
     stream: bool | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
     max_completion_tokens: int | None = None,
+    timeout_s: float | None = None,
     extra_body: dict[str, Any] | str | None = None,
 ) -> OpenAIConfig:
     env_model = os.environ.get("OPENAI_MODEL")
     env_key = os.environ.get("OPENAI_API_KEY")
     env_base_url = os.environ.get("OPENAI_BASE_URL")
     env_org = os.environ.get("OPENAI_ORGANIZATION")
+    # Every other field here is env-resolvable; reasoning_effort was the one
+    # that could only be set from Python, so an operator setting an effort in
+    # the environment got it silently dropped. It is a named request parameter
+    # rather than an extra_body key because that is the spelling the OpenAI
+    # chat-completions schema defines -- the nested {"reasoning":{"effort":...}}
+    # form belongs to the Responses API and is rejected as an unknown parameter.
+    env_effort = os.environ.get("OPENAI_REASONING_EFFORT")
+    env_flavor = os.environ.get("OPENAI_API_FLAVOR")
     env_extra_body = os.environ.get("OPENAI_EXTRA_BODY")
+    # Streaming was settable only from Python, so an operator could not turn on
+    # the one thing that lets a long reasoning request survive this gateway. It
+    # is not a latency preference: a non-streaming request sends nothing until
+    # generation finishes, so to any intermediary a long one looks idle, and
+    # measured here such a request is cut at ~300s whatever the client timeout.
+    env_stream = os.environ.get("OPENAI_STREAM")
 
     generate_kwargs: dict[str, Any] = {}
     if temperature is not None:
@@ -64,7 +102,14 @@ def load_openai_config(
         api_key=api_key or env_key,
         base_url=base_url or env_base_url,
         organization=organization or env_org,
-        reasoning_effort=reasoning_effort,
-        stream=OpenAIConfig.stream if stream is None else stream,
+        reasoning_effort=reasoning_effort or env_effort,
+        api_flavor=(api_flavor or env_flavor or OpenAIConfig.api_flavor).lower(),
+        stream=(
+            stream if stream is not None
+            else (env_stream.strip().lower() in ("1", "true", "yes", "on")
+                  if env_stream else OpenAIConfig.stream)
+        ),
+        timeout_s=(float(timeout_s) if timeout_s is not None
+                   else OpenAIConfig.timeout_s),
         generate_kwargs=generate_kwargs,
     )

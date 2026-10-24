@@ -1,0 +1,94 @@
+{
+  "run": "/home/user/runs/luna14/fpu_exceptions",
+  "module": "fpu_exceptions",
+  "bodies": 138,
+  "requirements": 136,
+  "set": "shipped",
+  "trials": 12,
+  "rounds": 2,
+  "seconds": 13990,
+  "history": [
+    {
+      "round": 0,
+      "requirements": 136,
+      "pass": 131,
+      "fail": 3,
+      "abstain": 2,
+      "failing_testpoints": 72,
+      "failing": [
+        "REQ-0080",
+        "REQ-0124",
+        "REQ-0126"
+      ],
+      "abstaining": [
+        "REQ-0022",
+        "REQ-0122"
+      ],
+      "rtl_lines": 566,
+      "editor_trials_used": 6
+    },
+    {
+      "round": 1,
+      "requirements": 136,
+      "pass": 131,
+      "fail": 3,
+      "abstain": 2,
+      "failing_testpoints": 73,
+      "failing": [
+        "REQ-0031",
+        "REQ-0080",
+        "REQ-0124"
+      ],
+      "abstaining": [
+        "REQ-0022",
+        "REQ-0122"
+      ],
+      "rtl_lines": 567,
+      "editor_trials_used": 6
+    },
+    {
+      "round": 2,
+      "requirements": 136,
+      "pass": 131,
+      "fail": 3,
+      "abstain": 2,
+      "failing_testpoints": 72,
+      "failing": [
+        "REQ-0080",
+        "REQ-0124",
+        "REQ-0126"
+      ],
+      "abstaining": [
+        "REQ-0022",
+        "REQ-0122"
+      ],
+      "rtl_lines": 566
+    }
+  ],
+  "final": {
+    "round": 2,
+    "requirements": 136,
+    "pass": 131,
+    "fail": 3,
+    "abstain": 2,
+    "failing_testpoints": 72,
+    "failing": [
+      "REQ-0080",
+      "REQ-0124",
+      "REQ-0126"
+    ],
+    "abstaining": [
+      "REQ-0022",
+      "REQ-0122"
+    ],
+    "rtl_lines": 566
+  },
+  "usage": {
+    "input": 46810019,
+    "cached": 41317544,
+    "output": 411342,
+    "reasoning": 0,
+    "calls": 215,
+    "cache_hit_rate": 0.8827
+  }
+}

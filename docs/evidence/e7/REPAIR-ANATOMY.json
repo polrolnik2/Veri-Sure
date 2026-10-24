@@ -1,0 +1,2666 @@
+{
+ "jobs": [
+  {
+   "module": "i2c_master_bit_ctrl",
+   "run": "luna12",
+   "outputs": [
+    "cmd_ack",
+    "busy",
+    "al",
+    "dout",
+    "scl_o",
+    "scl_oen",
+    "sda_o",
+    "sda_oen"
+   ],
+   "ports": {
+    "cmd_ack": {
+     "start": 0.9911125668053425,
+     "final": 0.9905110431553852,
+     "pool_mean": 0.9910054892969732,
+     "pool": [
+      0.9902842907847207,
+      0.9926148012609951,
+      0.9900102983368343,
+      0.9911125668053425
+     ],
+     "same_right": 313669,
+     "same_wrong": 1977,
+     "fixed": 845,
+     "broken": 1036,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "busy": {
+     "start": 0.968323953553556,
+     "final": 0.968323953553556,
+     "pool_mean": 0.9691593155857612,
+     "pool": [
+      0.9716654016823766,
+      0.968323953553556,
+      0.968323953553556,
+      0.968323953553556
+     ],
+     "same_right": 307469,
+     "same_wrong": 10058,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "al": {
+     "start": 0.9773877497031749,
+     "final": 0.998097799557203,
+     "pool_mean": 0.9718858553760783,
+     "pool": [
+      0.9706040746141273,
+      0.9680846038289658,
+      0.9714669933580451,
+      0.9773877497031749
+     ],
+     "same_right": 310243,
+     "same_wrong": 500,
+     "fixed": 6680,
+     "broken": 104,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "dout": {
+     "start": 0.2841834723514293,
+     "final": 0.2841834723514293,
+     "pool_mean": 0.2842410242664102,
+     "pool": [
+      0.28409832705255356,
+      0.28449882531022846,
+      0.2841834723514293,
+      0.2841834723514293
+     ],
+     "same_right": 90116,
+     "same_wrong": 226989,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "scl_o": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 317527,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "scl_oen": {
+     "start": 0.8334818771317085,
+     "final": 0.7915610326051012,
+     "pool_mean": 0.8055669281667386,
+     "pool": [
+      0.7641743851703949,
+      0.8327417825885672,
+      0.7918696677762835,
+      0.8334818771317085
+     ],
+     "same_right": 233771,
+     "same_wrong": 35303,
+     "fixed": 17571,
+     "broken": 30882,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sda_o": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 317527,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sda_oen": {
+     "start": 0.9302201072664686,
+     "final": 0.9303807235290227,
+     "pool_mean": 0.9158410150947793,
+     "pool": [
+      0.910754046112614,
+      0.9092455129799986,
+      0.9131443940200361,
+      0.9302201072664686
+     ],
+     "same_right": 284109,
+     "same_wrong": 10845,
+     "fixed": 11312,
+     "broken": 11261,
+     "still_wrong": 0,
+     "dc_changed": 0
+    }
+   },
+   "edges": {
+    "same_right": 50600,
+    "same_wrong": 195216,
+    "fixed": 8249,
+    "broken": 7973,
+    "still_wrong": 55489,
+    "dc_changed": 0
+   },
+   "rtl_lines": {
+    "start_full": 345,
+    "final_full": 348,
+    "diff_full": [
+     22,
+     19
+    ],
+    "diff_delivered": [
+     22,
+     19
+    ]
+   },
+   "assigned_in_diff": {
+    "state_r": 5,
+    "sda_oen": 4,
+    "scl_oen": 3,
+    "sda_chk_r": 3,
+    "clk_en": 2,
+    "fsm_active": 2,
+    "in_write_sequence": 2,
+    "cnt_r": 2,
+    "clk_en_r": 2,
+    "al": 1
+   },
+   "editor": {
+    "edits": 65,
+    "commits": 18,
+    "latched_rise": 4,
+    "latched_gradient": 0,
+    "not_latched": 14,
+    "rejected": 0,
+    "edits_latched": 14,
+    "edits_reverted": 37,
+    "edits_discarded": 11,
+    "edits_uncommitted": 3,
+    "launches": 1
+   },
+   "checks": {
+    "start_pass": 77,
+    "final_pass": 87,
+    "requirements": 103,
+    "fixed": [
+     "REQ-0025",
+     "REQ-0027",
+     "REQ-0029",
+     "REQ-0079",
+     "REQ-0088",
+     "REQ-0115",
+     "REQ-0121",
+     "REQ-0123",
+     "REQ-0131",
+     "REQ-0137"
+    ],
+    "broke": [],
+    "fixed_by_read": {
+     "port": 9,
+     "probe_only": 1,
+     "unknown": 0
+    },
+    "shipped_by_read": {
+     "port": 90,
+     "probe_only": 13
+    },
+    "ports_read_by_fixed": [
+     "al",
+     "cmd_ack",
+     "scl_oen",
+     "sda_oen"
+    ],
+    "probes_read_by_fixed": [
+     "clk_en",
+     "cnt_reload",
+     "fsm_active",
+     "in_read_sequence",
+     "in_start_sequence",
+     "in_stop_sequence",
+     "in_write_sequence",
+     "sda_chk",
+     "slave_wait"
+    ]
+   },
+   "outside_pool": {
+    "above": [
+     "al 99.8 (max 97.7)"
+    ],
+    "below": [],
+    "port_edges_fixed": 36408,
+    "port_edges_broken": 43283
+   }
+  },
+  {
+   "module": "i2c_master_byte_ctrl",
+   "run": "luna12",
+   "outputs": [
+    "cmd_ack",
+    "ack_out",
+    "dout",
+    "i2c_busy",
+    "i2c_al",
+    "scl_o",
+    "scl_oen",
+    "sda_o",
+    "sda_oen"
+   ],
+   "ports": {
+    "cmd_ack": {
+     "start": 0.9957199469715329,
+     "final": 0.9955987797750566,
+     "pool_mean": 0.9916813374007498,
+     "pool": [
+      0.9957199469715329,
+      0.9957930036635259,
+      0.9956344171857849,
+      0.9795779817821556
+     ],
+     "same_right": 558674,
+     "same_wrong": 2338,
+     "fixed": 64,
+     "broken": 132,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "ack_out": {
+     "start": 0.9078238371512879,
+     "final": 0.9193774857093983,
+     "pool_mean": 0.8397301000698493,
+     "pool": [
+      0.9078238371512879,
+      0.9195538908925033,
+      0.7824745905261508,
+      0.7490680817094553
+     ],
+     "same_right": 508843,
+     "same_wrong": 44611,
+     "fixed": 7119,
+     "broken": 635,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "dout": {
+     "start": 0.8206743310858007,
+     "final": 0.8153679206283588,
+     "pool_mean": 0.67023634730795,
+     "pool": [
+      0.8206743310858007,
+      0.7799817536457071,
+      0.7157488845490442,
+      0.36454041995124803
+     ],
+     "same_right": 456394,
+     "same_wrong": 95247,
+     "fixed": 1197,
+     "broken": 4175,
+     "still_wrong": 4195,
+     "dc_changed": 0
+    },
+    "i2c_busy": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 561208,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "i2c_al": {
+     "start": 0.990133782839874,
+     "final": 0.9900357799603712,
+     "pool_mean": 0.9903721080241193,
+     "pool": [
+      0.990133782839874,
+      0.9900464711835897,
+      0.9899769782326695,
+      0.9913311998403443
+     ],
+     "same_right": 555377,
+     "same_wrong": 5298,
+     "fixed": 239,
+     "broken": 294,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "scl_o": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 561208,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "scl_oen": {
+     "start": 0.8835583241863979,
+     "final": 0.8797237387920344,
+     "pool_mean": 0.8104775769411697,
+     "pool": [
+      0.8835583241863979,
+      0.8845882453564454,
+      0.8819279126455788,
+      0.5918358255762569
+     ],
+     "same_right": 491413,
+     "same_wrong": 63053,
+     "fixed": 2295,
+     "broken": 4447,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sda_o": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 561208,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sda_oen": {
+     "start": 0.5261738963093897,
+     "final": 0.5381427207024846,
+     "pool_mean": 0.5338506400478966,
+     "pool": [
+      0.5261738963093897,
+      0.5375974683183419,
+      0.527104032729398,
+      0.5445271628344571
+     ],
+     "same_right": 293207,
+     "same_wrong": 257112,
+     "fixed": 8803,
+     "broken": 2086,
+     "still_wrong": 0,
+     "dc_changed": 0
+    }
+   },
+   "edges": {
+    "same_right": 237423,
+    "same_wrong": 300714,
+    "fixed": 8217,
+    "broken": 2295,
+    "still_wrong": 12559,
+    "dc_changed": 0
+   },
+   "rtl_lines": {
+    "start_full": 261,
+    "final_full": 262,
+    "diff_full": [
+     23,
+     16
+    ],
+    "diff_delivered": [
+     23,
+     16
+    ]
+   },
+   "assigned_in_diff": {
+    "core_cmd_r": 5,
+    "state_r": 2,
+    "sr": 1,
+    "dcnt": 1
+   },
+   "editor": {
+    "edits": 51,
+    "commits": 20,
+    "latched_rise": 4,
+    "latched_gradient": 1,
+    "not_latched": 15,
+    "rejected": 0,
+    "edits_latched": 12,
+    "edits_reverted": 30,
+    "edits_discarded": 7,
+    "edits_uncommitted": 2,
+    "launches": 1
+   },
+   "checks": {
+    "start_pass": 52,
+    "final_pass": 56,
+    "requirements": 88,
+    "fixed": [
+     "REQ-0026",
+     "REQ-0050",
+     "REQ-0067",
+     "REQ-0076",
+     "REQ-0119"
+    ],
+    "broke": [
+     "REQ-0048"
+    ],
+    "fixed_by_read": {
+     "port": 5,
+     "probe_only": 0,
+     "unknown": 0
+    },
+    "shipped_by_read": {
+     "port": 82,
+     "probe_only": 6
+    },
+    "ports_read_by_fixed": [
+     "cmd_ack",
+     "dout",
+     "i2c_al"
+    ],
+    "probes_read_by_fixed": [
+     "core_ack",
+     "core_cmd",
+     "core_rxd",
+     "core_txd",
+     "go",
+     "shift",
+     "st_ack",
+     "st_idle",
+     "st_read",
+     "st_start",
+     "st_stop",
+     "st_write"
+    ]
+   },
+   "outside_pool": {
+    "above": [],
+    "below": [],
+    "port_edges_fixed": 19717,
+    "port_edges_broken": 11769
+   }
+  },
+  {
+   "module": "i2c_master_byte_ctrl",
+   "run": "luna13",
+   "outputs": [
+    "cmd_ack",
+    "ack_out",
+    "dout",
+    "i2c_busy",
+    "i2c_al",
+    "scl_o",
+    "scl_oen",
+    "sda_o",
+    "sda_oen"
+   ],
+   "ports": {
+    "cmd_ack": {
+     "start": 0.9965093156191643,
+     "final": 0.987888625963992,
+     "pool_mean": 0.9892985310259298,
+     "pool": [
+      0.9965093156191643,
+      0.9879171358925746,
+      0.978311071830765,
+      0.9944566007612151
+     ],
+     "same_right": 553744,
+     "same_wrong": 1292,
+     "fixed": 667,
+     "broken": 5505,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "ack_out": {
+     "start": 0.7928771507177375,
+     "final": 0.8231190574617611,
+     "pool_mean": 0.6984210845176833,
+     "pool": [
+      0.7928771507177375,
+      0.4693019343986543,
+      0.7596060640618095,
+      0.7718991888925318
+     ],
+     "same_right": 362611,
+     "same_wrong": 16909,
+     "fixed": 99330,
+     "broken": 82358,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "dout": {
+     "start": 0.7797536742170461,
+     "final": 0.6099877407307095,
+     "pool_mean": 0.5682536599620818,
+     "pool": [
+      0.7797536742170461,
+      0.3577247651494633,
+      0.45738300238057905,
+      0.6781531981012388
+     ],
+     "same_right": 330511,
+     "same_wrong": 50360,
+     "fixed": 11819,
+     "broken": 107093,
+     "still_wrong": 61425,
+     "dc_changed": 0
+    },
+    "i2c_busy": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 561208,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "i2c_al": {
+     "start": 0.9893069949109777,
+     "final": 0.9901070547818278,
+     "pool_mean": 0.9896357500249462,
+     "pool": [
+      0.9893069949109777,
+      0.990641615942752,
+      0.9888668728884834,
+      0.9897275163575715
+     ],
+     "same_right": 553849,
+     "same_wrong": 4194,
+     "fixed": 1807,
+     "broken": 1358,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "scl_o": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 561208,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "scl_oen": {
+     "start": 0.8947039243916693,
+     "final": 0.7840747102678508,
+     "pool_mean": 0.7332236888996593,
+     "pool": [
+      0.8947039243916693,
+      0.5475599064874342,
+      0.6161726133626035,
+      0.8744583113569301
+     ],
+     "same_right": 420432,
+     "same_wrong": 39496,
+     "fixed": 19597,
+     "broken": 81683,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sda_o": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 561208,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sda_oen": {
+     "start": 0.5408903650696355,
+     "final": 0.5245470485096435,
+     "pool_mean": 0.5256522537098545,
+     "pool": [
+      0.5408903650696355,
+      0.5122485780673119,
+      0.5277223418055338,
+      0.5217477298969366
+     ],
+     "same_right": 276496,
+     "same_wrong": 239772,
+     "fixed": 17884,
+     "broken": 27056,
+     "still_wrong": 0,
+     "dc_changed": 0
+    }
+   },
+   "edges": {
+    "same_right": 148277,
+    "same_wrong": 144596,
+    "fixed": 25622,
+    "broken": 44837,
+    "still_wrong": 197876,
+    "dc_changed": 0
+   },
+   "rtl_lines": {
+    "start_full": 249,
+    "final_full": 244,
+    "diff_full": [
+     11,
+     8
+    ],
+    "diff_delivered": [
+     11,
+     8
+    ]
+   },
+   "assigned_in_diff": {
+    "ld": 2,
+    "shift": 2,
+    "core_txd": 2,
+    "core_txd_r": 2
+   },
+   "editor": {
+    "edits": 107,
+    "commits": 32,
+    "latched_rise": 11,
+    "latched_gradient": 0,
+    "not_latched": 20,
+    "rejected": 0,
+    "edits_latched": 20,
+    "edits_reverted": 57,
+    "edits_discarded": 23,
+    "edits_uncommitted": 7,
+    "launches": 6
+   },
+   "checks": {
+    "start_pass": 67,
+    "final_pass": 75,
+    "requirements": 97,
+    "fixed": [
+     "REQ-0026",
+     "REQ-0031",
+     "REQ-0034",
+     "REQ-0043",
+     "REQ-0049",
+     "REQ-0050",
+     "REQ-0053",
+     "REQ-0119"
+    ],
+    "broke": [],
+    "fixed_by_read": {
+     "port": 8,
+     "probe_only": 0,
+     "unknown": 0
+    },
+    "shipped_by_read": {
+     "port": 91,
+     "probe_only": 6
+    },
+    "ports_read_by_fixed": [
+     "cmd_ack",
+     "dout",
+     "i2c_al"
+    ],
+    "probes_read_by_fixed": [
+     "cnt_done",
+     "core_ack",
+     "core_cmd_read",
+     "core_rxd",
+     "go",
+     "ld",
+     "shift",
+     "st_ack",
+     "st_idle",
+     "st_read",
+     "st_write"
+    ]
+   },
+   "outside_pool": {
+    "above": [
+     "ack_out 82.3 (max 79.3)"
+    ],
+    "below": [],
+    "port_edges_fixed": 151104,
+    "port_edges_broken": 305053
+   }
+  },
+  {
+   "module": "i2c_master_byte_ctrl",
+   "run": "luna14",
+   "outputs": [
+    "cmd_ack",
+    "ack_out",
+    "dout",
+    "i2c_busy",
+    "i2c_al",
+    "scl_o",
+    "scl_oen",
+    "sda_o",
+    "sda_oen"
+   ],
+   "ports": {
+    "cmd_ack": {
+     "start": 0.9795779817821556,
+     "final": 0.9828512779575487,
+     "pool_mean": 0.9811936928910493,
+     "pool": [
+      0.9795779817821556,
+      0.9795779817821556,
+      0.9860408262177304,
+      0.9795779817821556
+     ],
+     "same_right": 549515,
+     "same_wrong": 9392,
+     "fixed": 2069,
+     "broken": 232,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "ack_out": {
+     "start": 0.7277337457769668,
+     "final": 0.6214469501503899,
+     "pool_mean": 0.6941134124959016,
+     "pool": [
+      0.7277337457769668,
+      0.7283288905361293,
+      0.5713229319610554,
+      0.7490680817094553
+     ],
+     "same_right": 324308,
+     "same_wrong": 128345,
+     "fixed": 24453,
+     "broken": 84102,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "dout": {
+     "start": 0.34870137275306123,
+     "final": 0.34688564667645505,
+     "pool_mean": 0.36911359068295535,
+     "pool": [
+      0.34870137275306123,
+      0.3564756739034369,
+      0.39155714102436173,
+      0.3797201750509615
+     ],
+     "same_right": 177000,
+     "same_wrong": 274793,
+     "fixed": 17675,
+     "broken": 18694,
+     "still_wrong": 73046,
+     "dc_changed": 0
+    },
+    "i2c_busy": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 561208,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "i2c_al": {
+     "start": 0.9913311998403443,
+     "final": 0.9917517212869382,
+     "pool_mean": 0.9910750559507349,
+     "pool": [
+      0.9913311998403443,
+      0.9913311998403443,
+      0.9903066242819062,
+      0.9913311998403443
+     ],
+     "same_right": 556186,
+     "same_wrong": 4472,
+     "fixed": 393,
+     "broken": 157,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "scl_o": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 561208,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "scl_oen": {
+     "start": 0.5918358255762569,
+     "final": 0.5712427477869167,
+     "pool_mean": 0.5936301692064261,
+     "pool": [
+      0.5918358255762569,
+      0.5918358255762569,
+      0.5990132000969337,
+      0.5918358255762569
+     ],
+     "same_right": 282511,
+     "same_wrong": 190990,
+     "fixed": 38075,
+     "broken": 49632,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sda_o": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 561208,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sda_oen": {
+     "start": 0.5445253809639207,
+     "final": 0.588102806802469,
+     "pool_mean": 0.5418650482530541,
+     "pool": [
+      0.5445253809639207,
+      0.5445253809639207,
+      0.5338840501204545,
+      0.5445253809639207
+     ],
+     "same_right": 288453,
+     "same_wrong": 214021,
+     "fixed": 41595,
+     "broken": 17139,
+     "still_wrong": 0,
+     "dc_changed": 0
+    }
+   },
+   "edges": {
+    "same_right": 85242,
+    "same_wrong": 334460,
+    "fixed": 4942,
+    "broken": 8217,
+    "still_wrong": 128347,
+    "dc_changed": 0
+   },
+   "rtl_lines": {
+    "start_full": 257,
+    "final_full": 268,
+    "diff_full": [
+     18,
+     7
+    ],
+    "diff_delivered": [
+     18,
+     7
+    ]
+   },
+   "assigned_in_diff": {
+    "stop_pending": 6,
+    "state_r": 2,
+    "core_cmd_r": 2,
+    "cmd_ack": 2
+   },
+   "editor": {
+    "edits": 36,
+    "commits": 19,
+    "latched_rise": 3,
+    "latched_gradient": 0,
+    "not_latched": 16,
+    "rejected": 0,
+    "edits_latched": 4,
+    "edits_reverted": 26,
+    "edits_discarded": 5,
+    "edits_uncommitted": 1,
+    "launches": 1
+   },
+   "checks": {
+    "start_pass": 72,
+    "final_pass": 80,
+    "requirements": 98,
+    "fixed": [
+     "REQ-0012",
+     "REQ-0013",
+     "REQ-0062",
+     "REQ-0063",
+     "REQ-0069",
+     "REQ-0070",
+     "REQ-0121",
+     "REQ-0122"
+    ],
+    "broke": [],
+    "fixed_by_read": {
+     "port": 8,
+     "probe_only": 0,
+     "unknown": 0
+    },
+    "shipped_by_read": {
+     "port": 89,
+     "probe_only": 9
+    },
+    "ports_read_by_fixed": [
+     "cmd_ack",
+     "i2c_al"
+    ],
+    "probes_read_by_fixed": [
+     "core_ack",
+     "core_cmd_is_nop",
+     "go",
+     "i2c_cmd_stop",
+     "st_ack",
+     "st_idle",
+     "st_read",
+     "st_start",
+     "st_stop",
+     "st_write"
+    ]
+   },
+   "outside_pool": {
+    "above": [
+     "sda_oen 58.8 (max 54.5)"
+    ],
+    "below": [
+     "dout 34.7 (min 34.9)",
+     "scl_oen 57.1 (min 59.2)"
+    ],
+    "port_edges_fixed": 124260,
+    "port_edges_broken": 169956
+   }
+  },
+  {
+   "module": "or1200_dc_fsm",
+   "run": "luna12",
+   "outputs": [
+    "saved_addr",
+    "dcram_we",
+    "biu_read",
+    "biu_write",
+    "first_hit_ack",
+    "first_miss_ack",
+    "first_miss_err",
+    "burst",
+    "tag_we",
+    "dc_addr"
+   ],
+   "ports": {
+    "saved_addr": {
+     "start": 0.983319772172498,
+     "final": 0.9826688364524003,
+     "pool_mean": 0.9745117982099268,
+     "pool": [
+      0.983319772172498,
+      0.9865744507729862,
+      0.944833197721725,
+      0.983319772172498
+     ],
+     "same_right": 24154,
+     "same_wrong": 410,
+     "fixed": 0,
+     "broken": 16,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "dcram_we": {
+     "start": 0.9915785191212367,
+     "final": 0.9755492270138324,
+     "pool_mean": 0.987672904800651,
+     "pool": [
+      0.9915785191212367,
+      0.9915785191212367,
+      0.9759560618388934,
+      0.9915785191212367
+     ],
+     "same_right": 23979,
+     "same_wrong": 207,
+     "fixed": 0,
+     "broken": 394,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "biu_read": {
+     "start": 0.9814076484947112,
+     "final": 0.9803498779495525,
+     "pool_mean": 0.9767900732302686,
+     "pool": [
+      0.9814076484947112,
+      0.9967046379170057,
+      0.9476403580146461,
+      0.9814076484947112
+     ],
+     "same_right": 24097,
+     "same_wrong": 457,
+     "fixed": 0,
+     "broken": 26,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "biu_write": {
+     "start": 1.0,
+     "final": 0.9732302685109845,
+     "pool_mean": 0.9957892595606184,
+     "pool": [
+      1.0,
+      1.0,
+      0.9831570382424736,
+      1.0
+     ],
+     "same_right": 23922,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 658,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "first_hit_ack": {
+     "start": 0.9998779495524817,
+     "final": 0.9836452400325468,
+     "pool_mean": 0.9998576078112287,
+     "pool": [
+      0.9998779495524817,
+      0.9998779495524817,
+      0.9997965825874695,
+      0.9998779495524817
+     ],
+     "same_right": 24178,
+     "same_wrong": 3,
+     "fixed": 0,
+     "broken": 399,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "first_miss_ack": {
+     "start": 0.9999593165174939,
+     "final": 0.9768104149715215,
+     "pool_mean": 0.9985862489829129,
+     "pool": [
+      0.9999593165174939,
+      0.9999593165174939,
+      0.99446704637917,
+      0.9999593165174939
+     ],
+     "same_right": 24010,
+     "same_wrong": 1,
+     "fixed": 0,
+     "broken": 569,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "first_miss_err": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 24580,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "burst": {
+     "start": 0.9864117168429618,
+     "final": 0.985353946297803,
+     "pool_mean": 0.9763222131814484,
+     "pool": [
+      0.9864117168429618,
+      0.9896663954434499,
+      0.9427990235964199,
+      0.9864117168429618
+     ],
+     "same_right": 24220,
+     "same_wrong": 334,
+     "fixed": 0,
+     "broken": 26,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "tag_we": {
+     "start": 0.9834011391375101,
+     "final": 0.9832384052074857,
+     "pool_mean": 0.9837774613506916,
+     "pool": [
+      0.9834011391375101,
+      0.9906427990235964,
+      0.9776647681041497,
+      0.9834011391375101
+     ],
+     "same_right": 24168,
+     "same_wrong": 408,
+     "fixed": 0,
+     "broken": 4,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "dc_addr": {
+     "start": 0.9893409275834011,
+     "final": 0.9877949552481693,
+     "pool_mean": 0.9855268510984541,
+     "pool": [
+      0.9893409275834011,
+      0.9925956061838893,
+      0.9708299430431245,
+      0.9893409275834011
+     ],
+     "same_right": 24280,
+     "same_wrong": 262,
+     "fixed": 0,
+     "broken": 38,
+     "still_wrong": 0,
+     "dc_changed": 0
+    }
+   },
+   "edges": {
+    "same_right": 22773,
+    "same_wrong": 929,
+    "fixed": 0,
+    "broken": 753,
+    "still_wrong": 125,
+    "dc_changed": 0
+   },
+   "rtl_lines": {
+    "start_full": 252,
+    "final_full": 261,
+    "diff_full": [
+     21,
+     12
+    ],
+    "diff_delivered": [
+     21,
+     12
+    ]
+   },
+   "assigned_in_diff": {
+    "state": 4,
+    "store_r": 4,
+    "load_r": 4,
+    "cache_inhibit_r": 3,
+    "cnt": 2
+   },
+   "editor": null,
+   "checks": {
+    "start_pass": 66,
+    "final_pass": 67,
+    "requirements": 80,
+    "fixed": [
+     "REQ-0036"
+    ],
+    "broke": [],
+    "fixed_by_read": {
+     "port": 1,
+     "probe_only": 0,
+     "unknown": 0
+    },
+    "shipped_by_read": {
+     "port": 59,
+     "probe_only": 21
+    },
+    "ports_read_by_fixed": [
+     "biu_read",
+     "biu_write",
+     "dc_addr",
+     "saved_addr"
+    ],
+    "probes_read_by_fixed": [
+     "hitmiss_eval"
+    ]
+   },
+   "outside_pool": {
+    "above": [],
+    "below": [
+     "biu_write 97.3 (min 98.3)",
+     "first_hit_ack 98.4 (min 100.0)",
+     "first_miss_ack 97.7 (min 99.4)"
+    ],
+    "port_edges_fixed": 0,
+    "port_edges_broken": 2130
+   }
+  },
+  {
+   "module": "or1200_dc_fsm",
+   "run": "luna13",
+   "outputs": [
+    "saved_addr",
+    "dcram_we",
+    "biu_read",
+    "biu_write",
+    "first_hit_ack",
+    "first_miss_ack",
+    "first_miss_err",
+    "burst",
+    "tag_we",
+    "dc_addr"
+   ],
+   "ports": {
+    "saved_addr": {
+     "start": 0.944833197721725,
+     "final": 0.944833197721725,
+     "pool_mean": 0.9640764849471115,
+     "pool": [
+      0.944833197721725,
+      0.983319772172498,
+      0.983319772172498,
+      0.944833197721725
+     ],
+     "same_right": 23224,
+     "same_wrong": 1356,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "dcram_we": {
+     "start": 0.9767290480065094,
+     "final": 0.9849877949552481,
+     "pool_mean": 0.9841436126932466,
+     "pool": [
+      0.9770951993490643,
+      0.9915785191212367,
+      0.9911716842961757,
+      0.9767290480065094
+     ],
+     "same_right": 24006,
+     "same_wrong": 367,
+     "fixed": 205,
+     "broken": 2,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "biu_read": {
+     "start": 0.9573637103336046,
+     "final": 0.9573637103336046,
+     "pool_mean": 0.9669344995931652,
+     "pool": [
+      0.9476403580146461,
+      0.9814076484947112,
+      0.9813262815296989,
+      0.9573637103336046
+     ],
+     "same_right": 23532,
+     "same_wrong": 1048,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "biu_write": {
+     "start": 0.9831570382424736,
+     "final": 0.9831570382424736,
+     "pool_mean": 0.9915785191212367,
+     "pool": [
+      0.9831570382424736,
+      1.0,
+      1.0,
+      0.9831570382424736
+     ],
+     "same_right": 24166,
+     "same_wrong": 414,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "first_hit_ack": {
+     "start": 0.9982912937347437,
+     "final": 0.9997965825874695,
+     "pool_mean": 0.9994711147274207,
+     "pool": [
+      0.9997965825874695,
+      0.9999186330349878,
+      0.9998779495524817,
+      0.9982912937347437
+     ],
+     "same_right": 24534,
+     "same_wrong": 1,
+     "fixed": 41,
+     "broken": 4,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "first_miss_ack": {
+     "start": 0.99446704637917,
+     "final": 0.99446704637917,
+     "pool_mean": 0.997213181448332,
+     "pool": [
+      0.99446704637917,
+      0.9999593165174939,
+      0.9999593165174939,
+      0.99446704637917
+     ],
+     "same_right": 24444,
+     "same_wrong": 136,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "first_miss_err": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 24580,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "burst": {
+     "start": 0.9427990235964199,
+     "final": 0.9427990235964199,
+     "pool_mean": 0.9646053702196908,
+     "pool": [
+      0.9427990235964199,
+      0.9864117168429618,
+      0.9864117168429618,
+      0.9427990235964199
+     ],
+     "same_right": 23174,
+     "same_wrong": 1406,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "tag_we": {
+     "start": 0.9797396257119609,
+     "final": 0.9890154597233524,
+     "pool_mean": 0.9812347436940602,
+     "pool": [
+      0.9780309194467046,
+      0.9834011391375101,
+      0.9837672904800651,
+      0.9797396257119609
+     ],
+     "same_right": 24081,
+     "same_wrong": 269,
+     "fixed": 229,
+     "broken": 1,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "dc_addr": {
+     "start": 0.9708299430431245,
+     "final": 0.9708299430431245,
+     "pool_mean": 0.9800854353132629,
+     "pool": [
+      0.9708299430431245,
+      0.9893409275834011,
+      0.9893409275834011,
+      0.9708299430431245
+     ],
+     "same_right": 23863,
+     "same_wrong": 717,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    }
+   },
+   "edges": {
+    "same_right": 22190,
+    "same_wrong": 2114,
+    "fixed": 71,
+    "broken": 3,
+    "still_wrong": 202,
+    "dc_changed": 0
+   },
+   "rtl_lines": {
+    "start_full": 266,
+    "final_full": 267,
+    "diff_full": [
+     5,
+     4
+    ],
+    "diff_delivered": [
+     5,
+     4
+    ]
+   },
+   "assigned_in_diff": {
+    "tag_we": 2
+   },
+   "editor": {
+    "edits": 4,
+    "commits": 1,
+    "latched_rise": 1,
+    "latched_gradient": 0,
+    "not_latched": 0,
+    "rejected": 0,
+    "edits_latched": 4,
+    "edits_reverted": 0,
+    "edits_discarded": 0,
+    "edits_uncommitted": 0,
+    "launches": 1
+   },
+   "checks": {
+    "start_pass": 76,
+    "final_pass": 84,
+    "requirements": 84,
+    "fixed": [
+     "REQ-0002",
+     "REQ-0036",
+     "REQ-0038",
+     "REQ-0039",
+     "REQ-0040",
+     "REQ-0058",
+     "REQ-0081",
+     "REQ-0097"
+    ],
+    "broke": [],
+    "fixed_by_read": {
+     "port": 8,
+     "probe_only": 0,
+     "unknown": 0
+    },
+    "shipped_by_read": {
+     "port": 70,
+     "probe_only": 14
+    },
+    "ports_read_by_fixed": [
+     "biu_read",
+     "biu_write",
+     "burst",
+     "dc_addr",
+     "dcram_we",
+     "first_hit_ack",
+     "first_miss_ack",
+     "first_miss_err",
+     "saved_addr",
+     "tag_we"
+    ],
+    "probes_read_by_fixed": [
+     "cache_inhibit",
+     "cload",
+     "cnt_nonzero",
+     "cstore",
+     "first_store_hit_ack",
+     "hitmiss_eval",
+     "idle",
+     "load",
+     "lrefill3",
+     "srefill4",
+     "store"
+    ]
+   },
+   "outside_pool": {
+    "above": [
+     "tag_we 98.9 (max 98.4)"
+    ],
+    "below": [],
+    "port_edges_fixed": 475,
+    "port_edges_broken": 7
+   }
+  },
+  {
+   "module": "or1200_dc_fsm",
+   "run": "luna14",
+   "outputs": [
+    "saved_addr",
+    "dcram_we",
+    "biu_read",
+    "biu_write",
+    "first_hit_ack",
+    "first_miss_ack",
+    "first_miss_err",
+    "burst",
+    "tag_we",
+    "dc_addr"
+   ],
+   "ports": {
+    "saved_addr": {
+     "start": 0.9865744507729862,
+     "final": 0.9865744507729862,
+     "pool_mean": 0.9849471114727422,
+     "pool": [
+      0.983319772172498,
+      0.983319772172498,
+      0.9865744507729862,
+      0.9865744507729862
+     ],
+     "same_right": 24250,
+     "same_wrong": 330,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "dcram_we": {
+     "start": 0.991253051261188,
+     "final": 0.9903173311635476,
+     "pool_mean": 0.9912021969080553,
+     "pool": [
+      0.9908055329536208,
+      0.9908055329536208,
+      0.9919446704637918,
+      0.991253051261188
+     ],
+     "same_right": 24325,
+     "same_wrong": 198,
+     "fixed": 17,
+     "broken": 40,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "biu_read": {
+     "start": 0.9845809601301871,
+     "final": 0.9846623270951993,
+     "pool_mean": 0.982953620829943,
+     "pool": [
+      0.9813262815296989,
+      0.9813262815296989,
+      0.9845809601301871,
+      0.9845809601301871
+     ],
+     "same_right": 24201,
+     "same_wrong": 377,
+     "fixed": 2,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "biu_write": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 24580,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "first_hit_ack": {
+     "start": 0.9980065093572009,
+     "final": 0.9982099267697315,
+     "pool_mean": 0.9986167615947925,
+     "pool": [
+      0.9982912937347437,
+      0.9998779495524817,
+      0.9982912937347437,
+      0.9980065093572009
+     ],
+     "same_right": 24487,
+     "same_wrong": 0,
+     "fixed": 49,
+     "broken": 44,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "first_miss_ack": {
+     "start": 0.9999593165174939,
+     "final": 0.9999593165174939,
+     "pool_mean": 0.9999593165174939,
+     "pool": [
+      0.9999593165174939,
+      0.9999593165174939,
+      0.9999593165174939,
+      0.9999593165174939
+     ],
+     "same_right": 24579,
+     "same_wrong": 1,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "first_miss_err": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 24580,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "burst": {
+     "start": 0.9896663954434499,
+     "final": 0.9896663954434499,
+     "pool_mean": 0.9880390561432059,
+     "pool": [
+      0.9864117168429618,
+      0.9864117168429618,
+      0.9896663954434499,
+      0.9896663954434499
+     ],
+     "same_right": 24326,
+     "same_wrong": 254,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "tag_we": {
+     "start": 0.9834011391375101,
+     "final": 0.9837672904800651,
+     "pool_mean": 0.9834926769731489,
+     "pool": [
+      0.9834011391375101,
+      0.9834011391375101,
+      0.9837672904800651,
+      0.9834011391375101
+     ],
+     "same_right": 24172,
+     "same_wrong": 399,
+     "fixed": 9,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "dc_addr": {
+     "start": 0.9925956061838893,
+     "final": 0.9925956061838893,
+     "pool_mean": 0.9909682668836453,
+     "pool": [
+      0.9893409275834011,
+      0.9893409275834011,
+      0.9925956061838893,
+      0.9925956061838893
+     ],
+     "same_right": 24398,
+     "same_wrong": 182,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    }
+   },
+   "edges": {
+    "same_right": 23517,
+    "same_wrong": 961,
+    "fixed": 58,
+    "broken": 42,
+    "still_wrong": 2,
+    "dc_changed": 0
+   },
+   "rtl_lines": {
+    "start_full": 284,
+    "final_full": 277,
+    "diff_full": [
+     6,
+     13
+    ],
+    "diff_delivered": [
+     6,
+     13
+    ]
+   },
+   "assigned_in_diff": {},
+   "editor": {
+    "edits": 9,
+    "commits": 2,
+    "latched_rise": 2,
+    "latched_gradient": 0,
+    "not_latched": 0,
+    "rejected": 0,
+    "edits_latched": 9,
+    "edits_reverted": 0,
+    "edits_discarded": 0,
+    "edits_uncommitted": 0,
+    "launches": 1
+   },
+   "checks": {
+    "start_pass": 65,
+    "final_pass": 74,
+    "requirements": 79,
+    "fixed": [
+     "REQ-0025",
+     "REQ-0026",
+     "REQ-0039",
+     "REQ-0040",
+     "REQ-0047",
+     "REQ-0051",
+     "REQ-0058",
+     "REQ-0081",
+     "REQ-0087"
+    ],
+    "broke": [],
+    "fixed_by_read": {
+     "port": 8,
+     "probe_only": 1,
+     "unknown": 0
+    },
+    "shipped_by_read": {
+     "port": 60,
+     "probe_only": 19
+    },
+    "ports_read_by_fixed": [
+     "biu_read",
+     "biu_write",
+     "dcram_we",
+     "first_hit_ack",
+     "first_miss_ack",
+     "first_miss_err",
+     "tag_we"
+    ],
+    "probes_read_by_fixed": [
+     "cache_inhibit",
+     "cload",
+     "cnt_nonzero",
+     "cstore",
+     "first_store_hit_ack",
+     "hitmiss_eval",
+     "idle",
+     "load",
+     "lrefill3"
+    ]
+   },
+   "outside_pool": {
+    "above": [],
+    "below": [],
+    "port_edges_fixed": 77,
+    "port_edges_broken": 84
+   }
+  },
+  {
+   "module": "or1200_sb",
+   "run": "luna12",
+   "outputs": [
+    "dcsb_dat_o",
+    "dcsb_ack_o",
+    "dcsb_err_o",
+    "sbbiu_dat_o",
+    "sbbiu_adr_o",
+    "sbbiu_cyc_o",
+    "sbbiu_stb_o",
+    "sbbiu_we_o",
+    "sbbiu_sel_o",
+    "sbbiu_cab_o"
+   ],
+   "ports": {
+    "dcsb_dat_o": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 18849,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "dcsb_ack_o": {
+     "start": 0.9469998408403629,
+     "final": 0.9412700939041859,
+     "pool_mean": 0.9468406812032468,
+     "pool": [
+      0.9466815215661308,
+      0.9470528940527349,
+      0.9466284683537588,
+      0.9469998408403629
+     ],
+     "same_right": 17742,
+     "same_wrong": 999,
+     "fixed": 0,
+     "broken": 108,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "dcsb_err_o": {
+     "start": 0.9334182184731286,
+     "final": 0.9293331211204838,
+     "pool_mean": 0.9262825614090933,
+     "pool": [
+      0.9191469043450581,
+      0.9334182184731286,
+      0.9191469043450581,
+      0.9334182184731286
+     ],
+     "same_right": 17517,
+     "same_wrong": 1255,
+     "fixed": 0,
+     "broken": 77,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sbbiu_dat_o": {
+     "start": 0.6720780943286117,
+     "final": 0.6589739508727254,
+     "pool_mean": 0.634158310785718,
+     "pool": [
+      0.5858666242240967,
+      0.6852883442092419,
+      0.593400180380922,
+      0.6720780943286117
+     ],
+     "same_right": 12421,
+     "same_wrong": 6178,
+     "fixed": 0,
+     "broken": 247,
+     "still_wrong": 3,
+     "dc_changed": 0
+    },
+    "sbbiu_adr_o": {
+     "start": 0.6760570852565123,
+     "final": 0.662952941800626,
+     "pool_mean": 0.6364926521300864,
+     "pool": [
+      0.5898986683643694,
+      0.6893734415618866,
+      0.5906414133375776,
+      0.6760570852565123
+     ],
+     "same_right": 12496,
+     "same_wrong": 6103,
+     "fixed": 0,
+     "broken": 247,
+     "still_wrong": 3,
+     "dc_changed": 0
+    },
+    "sbbiu_cyc_o": {
+     "start": 0.7448140484906361,
+     "final": 0.7319221178842379,
+     "pool_mean": 0.7072523741312536,
+     "pool": [
+      0.6696906997718712,
+      0.7452384741896122,
+      0.6692662740728951,
+      0.7448140484906361
+     ],
+     "same_right": 13796,
+     "same_wrong": 4810,
+     "fixed": 0,
+     "broken": 243,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sbbiu_stb_o": {
+     "start": 0.7393495676163192,
+     "final": 0.7264045837975489,
+     "pool_mean": 0.7012308345270306,
+     "pool": [
+      0.663112101437742,
+      0.7397739933152953,
+      0.662687675738766,
+      0.7393495676163192
+     ],
+     "same_right": 13692,
+     "same_wrong": 4913,
+     "fixed": 0,
+     "broken": 244,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sbbiu_we_o": {
+     "start": 0.7017348400445647,
+     "final": 0.6887368030134224,
+     "pool_mean": 0.6584434187490052,
+     "pool": [
+      0.6151519974534458,
+      0.7021592657435408,
+      0.6147275717544697,
+      0.7017348400445647
+     ],
+     "same_right": 12982,
+     "same_wrong": 5622,
+     "fixed": 0,
+     "broken": 245,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sbbiu_sel_o": {
+     "start": 0.7176508037561674,
+     "final": 0.7045466603002812,
+     "pool_mean": 0.6756459228606292,
+     "pool": [
+      0.6382831980476418,
+      0.7133004403416627,
+      0.633349249297045,
+      0.7176508037561674
+     ],
+     "same_right": 13280,
+     "same_wrong": 5319,
+     "fixed": 0,
+     "broken": 247,
+     "still_wrong": 3,
+     "dc_changed": 0
+    },
+    "sbbiu_cab_o": {
+     "start": 0.8750066316515465,
+     "final": 0.8710276407236458,
+     "pool_mean": 0.865722319486445,
+     "pool": [
+      0.8564380073213433,
+      0.8750066316515465,
+      0.8564380073213433,
+      0.8750066316515465
+     ],
+     "same_right": 16418,
+     "same_wrong": 2356,
+     "fixed": 0,
+     "broken": 75,
+     "still_wrong": 0,
+     "dc_changed": 0
+    }
+   },
+   "edges": {
+    "same_right": 10168,
+    "same_wrong": 8272,
+    "fixed": 0,
+    "broken": 406,
+    "still_wrong": 3,
+    "dc_changed": 0
+   },
+   "rtl_lines": {
+    "start_full": 137,
+    "final_full": 137,
+    "diff_full": [
+     1,
+     1
+    ],
+    "diff_delivered": [
+     1,
+     1
+    ]
+   },
+   "assigned_in_diff": {},
+   "editor": {
+    "edits": 1,
+    "commits": 1,
+    "latched_rise": 1,
+    "latched_gradient": 0,
+    "not_latched": 0,
+    "rejected": 0,
+    "edits_latched": 1,
+    "edits_reverted": 0,
+    "edits_discarded": 0,
+    "edits_uncommitted": 0,
+    "launches": 1
+   },
+   "checks": {
+    "start_pass": 61,
+    "final_pass": 64,
+    "requirements": 68,
+    "fixed": [
+     "REQ-0020",
+     "REQ-0034",
+     "REQ-0075"
+    ],
+    "broke": [],
+    "fixed_by_read": {
+     "port": 3,
+     "probe_only": 0,
+     "unknown": 0
+    },
+    "shipped_by_read": {
+     "port": 46,
+     "probe_only": 22
+    },
+    "ports_read_by_fixed": [
+     "dcsb_ack_o",
+     "sbbiu_adr_o",
+     "sbbiu_cyc_o",
+     "sbbiu_dat_o",
+     "sbbiu_sel_o",
+     "sbbiu_stb_o",
+     "sbbiu_we_o"
+    ],
+    "probes_read_by_fixed": [
+     "fifo_wr",
+     "sel_sb"
+    ]
+   },
+   "outside_pool": {
+    "above": [],
+    "below": [
+     "dcsb_ack_o 94.1 (min 94.7)"
+    ],
+    "port_edges_fixed": 0,
+    "port_edges_broken": 1733
+   }
+  },
+  {
+   "module": "or1200_sb",
+   "run": "luna13",
+   "outputs": [
+    "dcsb_dat_o",
+    "dcsb_ack_o",
+    "dcsb_err_o",
+    "sbbiu_dat_o",
+    "sbbiu_adr_o",
+    "sbbiu_cyc_o",
+    "sbbiu_stb_o",
+    "sbbiu_we_o",
+    "sbbiu_sel_o",
+    "sbbiu_cab_o"
+   ],
+   "ports": {
+    "dcsb_dat_o": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 18849,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "dcsb_ack_o": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 18849,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "dcsb_err_o": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 18849,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sbbiu_dat_o": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 18849,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sbbiu_adr_o": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 18849,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sbbiu_cyc_o": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 18849,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sbbiu_stb_o": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 18849,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sbbiu_we_o": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 18849,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sbbiu_sel_o": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 18849,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sbbiu_cab_o": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 18849,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    }
+   },
+   "edges": {
+    "same_right": 18849,
+    "same_wrong": 0,
+    "fixed": 0,
+    "broken": 0,
+    "still_wrong": 0,
+    "dc_changed": 0
+   },
+   "rtl_lines": {
+    "start_full": 140,
+    "final_full": 140,
+    "diff_full": [
+     0,
+     0
+    ],
+    "diff_delivered": [
+     0,
+     0
+    ]
+   },
+   "assigned_in_diff": {},
+   "editor": {
+    "edits": 69,
+    "commits": 9,
+    "latched_rise": 0,
+    "latched_gradient": 0,
+    "not_latched": 9,
+    "rejected": 0,
+    "edits_latched": 0,
+    "edits_reverted": 43,
+    "edits_discarded": 26,
+    "edits_uncommitted": 0,
+    "launches": 1
+   },
+   "checks": {
+    "start_pass": 28,
+    "final_pass": 28,
+    "requirements": 66,
+    "fixed": [],
+    "broke": [],
+    "fixed_by_read": {
+     "port": 0,
+     "probe_only": 0,
+     "unknown": 0
+    },
+    "shipped_by_read": {
+     "port": 42,
+     "probe_only": 24
+    },
+    "ports_read_by_fixed": [],
+    "probes_read_by_fixed": []
+   },
+   "outside_pool": {
+    "above": [],
+    "below": [],
+    "port_edges_fixed": 0,
+    "port_edges_broken": 0
+   }
+  },
+  {
+   "module": "or1200_sb",
+   "run": "luna14",
+   "outputs": [
+    "dcsb_dat_o",
+    "dcsb_ack_o",
+    "dcsb_err_o",
+    "sbbiu_dat_o",
+    "sbbiu_adr_o",
+    "sbbiu_cyc_o",
+    "sbbiu_stb_o",
+    "sbbiu_we_o",
+    "sbbiu_sel_o",
+    "sbbiu_cab_o"
+   ],
+   "ports": {
+    "dcsb_dat_o": {
+     "start": 1.0,
+     "final": 1.0,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 18849,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 0,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "dcsb_ack_o": {
+     "start": 1.0,
+     "final": 0.9466284683537588,
+     "pool_mean": 0.9941243567297999,
+     "pool": [
+      0.9764974269191999,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 17843,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 1006,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "dcsb_err_o": {
+     "start": 1.0,
+     "final": 0.9191469043450581,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 17325,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 1524,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sbbiu_dat_o": {
+     "start": 1.0,
+     "final": 0.5788105469786196,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 10910,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 7939,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sbbiu_adr_o": {
+     "start": 1.0,
+     "final": 0.5705342458485861,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 10754,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 8095,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sbbiu_cyc_o": {
+     "start": 1.0,
+     "final": 0.6692662740728951,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 12615,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 6234,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sbbiu_stb_o": {
+     "start": 1.0,
+     "final": 0.662687675738766,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 12491,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 6358,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sbbiu_we_o": {
+     "start": 1.0,
+     "final": 0.6147275717544697,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 11587,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 7262,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sbbiu_sel_o": {
+     "start": 1.0,
+     "final": 0.5941429253541302,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 11199,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 7650,
+     "still_wrong": 0,
+     "dc_changed": 0
+    },
+    "sbbiu_cab_o": {
+     "start": 1.0,
+     "final": 0.8564380073213433,
+     "pool_mean": 1.0,
+     "pool": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "same_right": 16143,
+     "same_wrong": 0,
+     "fixed": 0,
+     "broken": 2706,
+     "still_wrong": 0,
+     "dc_changed": 0
+    }
+   },
+   "edges": {
+    "same_right": 7629,
+    "same_wrong": 0,
+    "fixed": 0,
+    "broken": 11220,
+    "still_wrong": 0,
+    "dc_changed": 0
+   },
+   "rtl_lines": {
+    "start_full": 152,
+    "final_full": 153,
+    "diff_full": [
+     1,
+     0
+    ],
+    "diff_delivered": [
+     1,
+     0
+    ]
+   },
+   "assigned_in_diff": {},
+   "editor": {
+    "edits": 16,
+    "commits": 4,
+    "latched_rise": 1,
+    "latched_gradient": 0,
+    "not_latched": 2,
+    "rejected": 1,
+    "edits_latched": 1,
+    "edits_reverted": 15,
+    "edits_discarded": 0,
+    "edits_uncommitted": 0,
+    "launches": 1
+   },
+   "checks": {
+    "start_pass": 28,
+    "final_pass": 65,
+    "requirements": 66,
+    "fixed": [
+     "REQ-0001",
+     "REQ-0002",
+     "REQ-0004",
+     "REQ-0005",
+     "REQ-0006",
+     "REQ-0009",
+     "REQ-0010",
+     "REQ-0013",
+     "REQ-0015",
+     "REQ-0016",
+     "REQ-0017",
+     "REQ-0018",
+     "REQ-0020",
+     "REQ-0021",
+     "REQ-0022",
+     "REQ-0023",
+     "REQ-0025",
+     "REQ-0026",
+     "REQ-0027",
+     "REQ-0031",
+     "REQ-0035",
+     "REQ-0036",
+     "REQ-0041",
+     "REQ-0044",
+     "REQ-0066",
+     "REQ-0072",
+     "REQ-0073",
+     "REQ-0074",
+     "REQ-0075",
+     "REQ-0076",
+     "REQ-0077",
+     "REQ-0078",
+     "REQ-0079",
+     "REQ-0080",
+     "REQ-0081",
+     "REQ-0082",
+     "REQ-0084"
+    ],
+    "broke": [],
+    "fixed_by_read": {
+     "port": 26,
+     "probe_only": 11,
+     "unknown": 0
+    },
+    "shipped_by_read": {
+     "port": 45,
+     "probe_only": 21
+    },
+    "ports_read_by_fixed": [
+     "dcsb_ack_o",
+     "dcsb_dat_o",
+     "dcsb_err_o",
+     "sbbiu_adr_o",
+     "sbbiu_cab_o",
+     "sbbiu_cyc_o",
+     "sbbiu_dat_o",
+     "sbbiu_sel_o",
+     "sbbiu_stb_o",
+     "sbbiu_we_o"
+    ],
+    "probes_read_by_fixed": [
+     "fifo_dat_i",
+     "fifo_dat_o",
+     "fifo_empty",
+     "fifo_full",
+     "fifo_rd",
+     "fifo_wr",
+     "fifo_wr_ack",
+     "or1200_sb_fifo",
+     "outstanding_store",
+     "sel_sb"
+    ]
+   },
+   "outside_pool": {
+    "above": [],
+    "below": [
+     "dcsb_ack_o 94.7 (min 97.6)",
+     "dcsb_err_o 91.9 (min 100.0)",
+     "sbbiu_dat_o 57.9 (min 100.0)",
+     "sbbiu_adr_o 57.1 (min 100.0)",
+     "sbbiu_cyc_o 66.9 (min 100.0)",
+     "sbbiu_stb_o 66.3 (min 100.0)",
+     "sbbiu_we_o 61.5 (min 100.0)",
+     "sbbiu_sel_o 59.4 (min 100.0)",
+     "sbbiu_cab_o 85.6 (min 100.0)"
+    ],
+    "port_edges_fixed": 0,
+    "port_edges_broken": 48774
+   }
+  }
+ ]
+}

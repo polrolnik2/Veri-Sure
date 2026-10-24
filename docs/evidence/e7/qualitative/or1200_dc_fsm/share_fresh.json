@@ -1,0 +1,168 @@
+{
+ "luna12.gen1": {
+  "total": 1054,
+  "CI": 266,
+  "ADDR": 330,
+  "BRLOAD": 352,
+  "HITEVAL": 81,
+  "ERR": 0,
+  "ci:CI_LIVE_WE": 264,
+  "ci:CI_CYC_GATE": 11,
+  "ci:CI_HIT_R": 9
+ },
+ "luna12.gen2": {
+  "total": 702,
+  "CI": 290,
+  "ADDR": 330,
+  "HITEVAL": 81,
+  "ci:CI_LIVE_WE": 288,
+  "ci:CI_CYC_GATE": 11,
+  "ci:CI_HIT_R": 9
+ },
+ "luna12.gen3": {
+  "total": 2589,
+  "SR": 1516,
+  "CI": 261,
+  "ADDR": 295,
+  "BRLOAD": 221,
+  "HITEVAL": 81,
+  "DWE": 19,
+  "ci:CI_LIVE_WE": 258,
+  "ci:CI_CYC_GATE": 9,
+  "ci:CI_HIT_R": 6
+ },
+ "luna12.r0": {
+  "total": 1054,
+  "CI": 266,
+  "ADDR": 330,
+  "BRLOAD": 352,
+  "HITEVAL": 81,
+  "ci:CI_LIVE_WE": 264,
+  "ci:CI_CYC_GATE": 11,
+  "ci:CI_HIT_R": 9
+ },
+ "luna12.final": {
+  "total": 2269,
+  "SR": 1647,
+  "CI": 286,
+  "ADDR": 295,
+  "HITEVAL": 1,
+  "ci:CI_LIVE_WE": 282,
+  "ci:CI_CYC_GATE": 9,
+  "ci:CI_HIT_R": 7
+ },
+ "luna13.gen1": {
+  "total": 2564,
+  "SR": 1519,
+  "CI": 255,
+  "ADDR": 295,
+  "BRLOAD": 221,
+  "HITEVAL": 81,
+  "ci:CI_LIVE_WE": 252,
+  "ci:CI_CYC_GATE": 3,
+  "ci:CI_HIT_R": 0
+ },
+ "luna13.gen2": {
+  "total": 1053,
+  "CI": 266,
+  "ADDR": 330,
+  "BRLOAD": 352,
+  "HITEVAL": 80,
+  "ci:CI_LIVE_WE": 264,
+  "ci:CI_CYC_GATE": 11,
+  "ci:CI_HIT_R": 9
+ },
+ "luna13.gen3": {
+  "total": 1065,
+  "CI": 254,
+  "ADDR": 330,
+  "BRLOAD": 352,
+  "HITEVAL": 81,
+  "DWE": 19,
+  "BRCI": 1,
+  "ci:CI_LIVE_WE": 254,
+  "ci:CI_CYC_GATE": 0,
+  "ci:CI_HIT_R": 0
+ },
+ "luna13.r0": {
+  "total": 2387,
+  "SR": 1646,
+  "CI": 282,
+  "ADDR": 295,
+  "HITEVAL": 80,
+  "ACKQ": 38,
+  "ci:CI_LIVE_WE": 282,
+  "ci:CI_CYC_GATE": 6,
+  "ci:CI_HIT_R": 6
+ },
+ "luna13.final": {
+  "total": 2563,
+  "SR": 1519,
+  "CI": 255,
+  "ADDR": 295,
+  "BRLOAD": 221,
+  "HITEVAL": 80,
+  "ci:CI_LIVE_WE": 252,
+  "ci:CI_CYC_GATE": 3,
+  "ci:CI_HIT_R": 0
+ },
+ "luna14.gen1": {
+  "total": 1112,
+  "CI": 261,
+  "ADDR": 330,
+  "BRLOAD": 352,
+  "HITEVAL": 80,
+  "ACKQ": 38,
+  "ERR": 0,
+  "DWE": 18,
+  "BRCI": 1,
+  "ci:CI_LIVE_WE": 263,
+  "ci:CI_CYC_GATE": 7,
+  "ci:CI_HIT_R": 9
+ },
+ "luna14.gen2": {
+  "total": 1074,
+  "CI": 263,
+  "ADDR": 330,
+  "BRLOAD": 352,
+  "HITEVAL": 81,
+  "DWE": 19,
+  "BRCI": 1,
+  "ci:CI_LIVE_WE": 263,
+  "ci:CI_CYC_GATE": 9,
+  "ci:CI_HIT_R": 9
+ },
+ "luna14.gen3": {
+  "total": 1005,
+  "CI": 252,
+  "ADDR": 330,
+  "BRLOAD": 352,
+  "HITEVAL": 0,
+  "ACKQ": 39,
+  "BRCI": 1,
+  "ci:CI_LIVE_WE": 254,
+  "ci:CI_CYC_GATE": -2,
+  "ci:CI_HIT_R": 0
+ },
+ "luna14.r0": {
+  "total": 1021,
+  "CI": 262,
+  "ADDR": 330,
+  "BRLOAD": 352,
+  "ACKQ": 47,
+  "BRCI": 1,
+  "ci:CI_LIVE_WE": 263,
+  "ci:CI_CYC_GATE": 7,
+  "ci:CI_HIT_R": 10
+ },
+ "luna14.final": {
+  "total": 983,
+  "CI": 257,
+  "ADDR": 330,
+  "BRLOAD": 352,
+  "DWE": 19,
+  "ci:CI_LIVE_WE": 254,
+  "ci:CI_CYC_GATE": 2,
+  "ci:CI_HIT_R": 1
+ }
+}

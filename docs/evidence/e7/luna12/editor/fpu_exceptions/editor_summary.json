@@ -1,0 +1,139 @@
+{
+  "run": "/home/user/runs/luna12/fpu_exceptions",
+  "module": "fpu_exceptions",
+  "bodies": 143,
+  "requirements": 143,
+  "set": "shipped",
+  "trials": 20,
+  "rounds": 3,
+  "seconds": 15130,
+  "history": [
+    {
+      "round": 0,
+      "requirements": 143,
+      "pass": 99,
+      "fail": 37,
+      "abstain": 7,
+      "failing_testpoints": 283,
+      "failing": [
+        "REQ-0001",
+        "REQ-0002",
+        "REQ-0003",
+        "REQ-0006",
+        "REQ-0009",
+        "REQ-0012",
+        "REQ-0013",
+        "REQ-0018",
+        "REQ-0019",
+        "REQ-0020",
+        "REQ-0022",
+        "REQ-0026",
+        "REQ-0037",
+        "REQ-0039",
+        "REQ-0040",
+        "REQ-0113",
+        "REQ-0120",
+        "REQ-0123",
+        "REQ-0133",
+        "REQ-0135",
+        "REQ-0136",
+        "REQ-0137",
+        "REQ-0139",
+        "REQ-0141",
+        "REQ-0144",
+        "REQ-0147",
+        "REQ-0149",
+        "REQ-0156",
+        "REQ-0157",
+        "REQ-0159",
+        "REQ-0161",
+        "REQ-0162",
+        "REQ-0165",
+        "REQ-0168",
+        "REQ-0169",
+        "REQ-0170",
+        "REQ-0171"
+      ],
+      "abstaining": [
+        "REQ-0004",
+        "REQ-0014",
+        "REQ-0083",
+        "REQ-0108",
+        "REQ-0111",
+        "REQ-0116",
+        "REQ-0155"
+      ],
+      "rtl_lines": 429,
+      "editor_trials_used": 9
+    },
+    {
+      "round": 1,
+      "requirements": 143,
+      "pass": 136,
+      "fail": 1,
+      "abstain": 6,
+      "failing_testpoints": 1,
+      "failing": [
+        "REQ-0149"
+      ],
+      "abstaining": [
+        "REQ-0004",
+        "REQ-0014",
+        "REQ-0083",
+        "REQ-0108",
+        "REQ-0111",
+        "REQ-0116"
+      ],
+      "rtl_lines": 435,
+      "editor_trials_used": 2
+    },
+    {
+      "round": 2,
+      "requirements": 143,
+      "pass": 136,
+      "fail": 1,
+      "abstain": 6,
+      "failing_testpoints": 0,
+      "failing": [
+        "REQ-0149"
+      ],
+      "abstaining": [
+        "REQ-0004",
+        "REQ-0014",
+        "REQ-0083",
+        "REQ-0108",
+        "REQ-0111",
+        "REQ-0116"
+      ],
+      "rtl_lines": 435
+    }
+  ],
+  "final": {
+    "round": 2,
+    "requirements": 143,
+    "pass": 136,
+    "fail": 1,
+    "abstain": 6,
+    "failing_testpoints": 0,
+    "failing": [
+      "REQ-0149"
+    ],
+    "abstaining": [
+      "REQ-0004",
+      "REQ-0014",
+      "REQ-0083",
+      "REQ-0108",
+      "REQ-0111",
+      "REQ-0116"
+    ],
+    "rtl_lines": 435
+  },
+  "usage": {
+    "input": 63836994,
+    "cached": 57868083,
+    "output": 296806,
+    "reasoning": 0,
+    "calls": 223,
+    "cache_hit_rate": 0.9065
+  }
+}

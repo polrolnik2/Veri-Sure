@@ -1,0 +1,129 @@
+{
+  "run": "/home/user/runs/luna15/i2c_master_bit_ctrl",
+  "module": "i2c_master_bit_ctrl",
+  "bodies": 108,
+  "requirements": 106,
+  "set": "shipped",
+  "trials": 20,
+  "rounds": 3,
+  "seconds": 16807,
+  "history": [
+    {
+      "round": 0,
+      "requirements": 106,
+      "pass": 91,
+      "fail": 7,
+      "abstain": 8,
+      "failing_testpoints": 296,
+      "failing": [
+        "REQ-0057",
+        "REQ-0061",
+        "REQ-0062",
+        "REQ-0065",
+        "REQ-0104",
+        "REQ-0114",
+        "REQ-0134"
+      ],
+      "abstaining": [
+        "REQ-0002",
+        "REQ-0007",
+        "REQ-0022",
+        "REQ-0027",
+        "REQ-0030",
+        "REQ-0105",
+        "REQ-0111",
+        "REQ-0130"
+      ],
+      "rtl_lines": 375,
+      "editor_trials_used": 6
+    },
+    {
+      "round": 1,
+      "requirements": 106,
+      "pass": 96,
+      "fail": 2,
+      "abstain": 8,
+      "failing_testpoints": 297,
+      "failing": [
+        "REQ-0065",
+        "REQ-0104"
+      ],
+      "abstaining": [
+        "REQ-0002",
+        "REQ-0007",
+        "REQ-0022",
+        "REQ-0027",
+        "REQ-0030",
+        "REQ-0105",
+        "REQ-0111",
+        "REQ-0130"
+      ],
+      "rtl_lines": 303,
+      "editor_trials_used": 6
+    },
+    {
+      "round": 2,
+      "requirements": 106,
+      "pass": 96,
+      "fail": 2,
+      "abstain": 8,
+      "failing_testpoints": 296,
+      "failing": [
+        "REQ-0065",
+        "REQ-0104"
+      ],
+      "abstaining": [
+        "REQ-0002",
+        "REQ-0007",
+        "REQ-0022",
+        "REQ-0027",
+        "REQ-0030",
+        "REQ-0105",
+        "REQ-0111",
+        "REQ-0130"
+      ],
+      "rtl_lines": 301,
+      "editor_trials_used": 8
+    },
+    {
+      "round": 3,
+      "requirements": 106,
+      "pass": 98,
+      "fail": 0,
+      "abstain": 8,
+      "failing_testpoints": 299,
+      "failing": [],
+      "abstaining": [
+        "REQ-0002",
+        "REQ-0007",
+        "REQ-0022",
+        "REQ-0027",
+        "REQ-0030",
+        "REQ-0105",
+        "REQ-0111",
+        "REQ-0130"
+      ],
+      "rtl_lines": 314
+    }
+  ],
+  "final": {
+    "round": 3,
+    "requirements": 106,
+    "pass": 98,
+    "fail": 0,
+    "abstain": 8,
+    "failing_testpoints": 299,
+    "failing": [],
+    "abstaining": [
+      "REQ-0002",
+      "REQ-0007",
+      "REQ-0022",
+      "REQ-0027",
+      "REQ-0030",
+      "REQ-0105",
+      "REQ-0111",
+      "REQ-0130"
+    ],
+    "rtl_lines": 314
+  }
+}

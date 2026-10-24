@@ -1,0 +1,54 @@
+diff --git a/eda_agent/sim_reviewer.py b/eda_agent/sim_reviewer.py
+index ae9930f..090af25 100644
+--- a/eda_agent/sim_reviewer.py
++++ b/eda_agent/sim_reviewer.py
+@@ -112,9 +112,34 @@ def _has_multidriven_warning(stdout: str, stderr: str) -> bool:
+     return bool(_MULTIDRIVEN_RE.search(stdout) or _MULTIDRIVEN_RE.search(stderr))
+ 
+ 
++# Pre-made modules a hierarchical candidate instantiates but does not define,
++# and the include directories their headers live in. Module-level rather than
++# threaded through `_run_instance`, deliberately: this is a back-port of a
++# capability into the pre-hardening arm of a comparison, and rewriting that
++# arm's control flow would change the very thing being measured.
++#
++# ChipVerilog supplies these files to the candidate itself -- its compile gate
++# and its Yosys miter both read `<candidate>.v` alongside `<child>.v` -- so
++# without them a correct hierarchical design cannot elaborate here at all, and
++# arm A would lose on plumbing rather than on testbench quality.
++EXTRA_SOURCES: list[str] = []
++INCLUDE_DIRS: list[str] = []
++
++
++def _library_args() -> tuple[str, str]:
++    return (
++        " ".join(f"-I{d}" for d in INCLUDE_DIRS),
++        " ".join(str(s) for s in EXTRA_SOURCES),
++    )
++
++
+ def check_syntax(rtl_path: str) -> Tuple[bool, str]:
+     _require_executable("verilator")
+-    cmd = f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert {rtl_path}"
++    incs, extras = _library_args()
++    cmd = (
++        f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert "
++        f"{incs} {rtl_path} {extras}"
++    )
+     is_pass, sim_output = run_bash_command(cmd, timeout=60)
+     sim_output_obj = CommandResult.model_validate_json(sim_output)
+     stdout = sim_output_obj.stdout or ""
+@@ -197,10 +222,11 @@ def sim_review(
+     # - Use --timing to support delays/event controls in testbenches.
+     # - Use --trace so $dumpfile/$dumpvars can generate wave.vcd for debugging.
+     # - Use --assert (or default-on in newer versions) for assertion support.
+-    srcs = f"{tb_path} {rtl_path} {golden_rtl_path}".strip()
++    incs, extras = _library_args()
++    srcs = f"{tb_path} {rtl_path} {golden_rtl_path} {extras}".strip()
+     cmd = (
+         "verilator --binary -j 0 --sv --timing --trace --assert -Wall -Wno-fatal "
+-        f"--Mdir obj_dir -o {sim_bin} {srcs}; "
++        f"{incs} --Mdir obj_dir -o {sim_bin} {srcs}; "
+         f"{sim_bin}"
+     )
+     cmd_ok, sim_output = run_bash_command(cmd, timeout=120, cwd=output_path_per_run)

@@ -1,0 +1,107 @@
+[
+ {
+  "run": "luna12",
+  "design": "golden",
+  "g": 100.0,
+  "al_edges": 0.8409465372963333,
+  "al_tps": "291/435",
+  "unknown_cells": 0.0
+ },
+ {
+  "run": "luna12",
+  "design": "start",
+  "g": 43.23847094187193,
+  "edges": 169333,
+  "al_edges": 0.48425292175772,
+  "al_tps": "291/435",
+  "unknown_cells": 0.0
+ },
+ {
+  "run": "luna12",
+  "design": "codes",
+  "g": 97.5952708568324,
+  "edges": 169333,
+  "al_edges": 0.8409465372963333,
+  "al_tps": "291/435",
+  "unknown_cells": 0.0
+ },
+ {
+  "run": "luna13",
+  "design": "golden",
+  "g": 100.0,
+  "al_edges": 0.974052182648238,
+  "al_tps": "300/434",
+  "unknown_cells": 0.0
+ },
+ {
+  "run": "luna13",
+  "design": "start",
+  "g": 34.42547962652364,
+  "edges": 222986,
+  "al_edges": 0.6076614675360785,
+  "al_tps": "295/434",
+  "unknown_cells": 0.0
+ },
+ {
+  "run": "luna13",
+  "design": "codes",
+  "g": 74.0903016332864,
+  "edges": 222986,
+  "al_edges": 0.9745006412958661,
+  "al_tps": "299/434",
+  "unknown_cells": 0.0
+ },
+ {
+  "run": "luna14",
+  "design": "golden",
+  "g": 100.0,
+  "al_edges": 0.763815286963627,
+  "al_tps": "281/414",
+  "unknown_cells": 0.0
+ },
+ {
+  "run": "luna14",
+  "design": "start",
+  "g": 15.469924032944714,
+  "edges": 168889,
+  "al_edges": 0.4511839136947936,
+  "al_tps": "280/414",
+  "unknown_cells": 0.0
+ },
+ {
+  "run": "luna14",
+  "design": "codes",
+  "g": 13.939925039523,
+  "edges": 168889,
+  "al_edges": 0.5482891129676888,
+  "al_tps": "279/414",
+  "unknown_cells": 0.0
+ },
+ {
+  "run": "luna14",
+  "design": "hold",
+  "g": 36.0366868179692,
+  "edges": 168889,
+  "al_edges": 0.6033548662139038,
+  "al_tps": "281/414",
+  "unknown_cells": 0.0
+ },
+ {
+  "run": "luna14",
+  "design": "hold+codes",
+  "g": 64.52818123145971,
+  "edges": 168889,
+  "al_edges": 0.6519074658503514,
+  "al_tps": "281/414",
+  "unknown_cells": 0.0
+ },
+ {
+  "run": "luna12",
+  "design": "model final",
+  "g": 33.72112937230192,
+  "edges": 169333,
+  "al_edges": 0.5421270514312037,
+  "al_tps": "291/435",
+  "unknown_cells": 4.826387453518609
+ }
+]

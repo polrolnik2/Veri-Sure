@@ -1,0 +1,6 @@
+{
+  "verdict": "met",
+  "reason": "the requirement fixes cout as the logical AND of a and b, and _half_add returns that as its second value, masked to the declared one-bit width.",
+  "evidence": "_half_add: `return ..., self.mask(a & b, 1)`; evaluate assigns it to o['cout']",
+  "remedy": ""
+}

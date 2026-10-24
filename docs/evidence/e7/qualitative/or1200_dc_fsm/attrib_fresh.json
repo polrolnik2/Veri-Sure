@@ -1,0 +1,383 @@
+{
+ "single": {
+  "SR": {
+   "edges": 1687,
+   "ports": {
+    "saved_addr": 962,
+    "dcram_we": 369,
+    "biu_read": 967,
+    "biu_write": 414,
+    "first_hit_ack": 1,
+    "first_miss_ack": 135,
+    "first_miss_err": 0,
+    "burst": 1074,
+    "tag_we": 270,
+    "dc_addr": 455
+   }
+  },
+  "CI_COMB": {
+   "edges": 282,
+   "ports": {
+    "saved_addr": 0,
+    "dcram_we": 198,
+    "biu_read": 1,
+    "biu_write": 0,
+    "first_hit_ack": 2,
+    "first_miss_ack": 1,
+    "first_miss_err": 0,
+    "burst": 254,
+    "tag_we": 221,
+    "dc_addr": 0
+   }
+  },
+  "CI_REFILL": {
+   "edges": 0,
+   "ports": {
+    "saved_addr": 0,
+    "dcram_we": 0,
+    "biu_read": 0,
+    "biu_write": 0,
+    "first_hit_ack": 0,
+    "first_miss_ack": 0,
+    "first_miss_err": 0,
+    "burst": 0,
+    "tag_we": 0,
+    "dc_addr": 0
+   }
+  },
+  "ACK_EVAL": {
+   "edges": 1,
+   "ports": {
+    "saved_addr": 0,
+    "dcram_we": 0,
+    "biu_read": 0,
+    "biu_write": 0,
+    "first_hit_ack": 1,
+    "first_miss_ack": 0,
+    "first_miss_err": 0,
+    "burst": 0,
+    "tag_we": 0,
+    "dc_addr": 0
+   }
+  },
+  "ACK_CYC": {
+   "edges": 42,
+   "ports": {
+    "saved_addr": 0,
+    "dcram_we": 0,
+    "biu_read": 0,
+    "biu_write": 0,
+    "first_hit_ack": 42,
+    "first_miss_ack": 0,
+    "first_miss_err": 0,
+    "burst": 0,
+    "tag_we": 0,
+    "dc_addr": 0
+   }
+  },
+  "EXIT_EVAL": {
+   "edges": 81,
+   "ports": {
+    "saved_addr": 0,
+    "dcram_we": 0,
+    "biu_read": 81,
+    "biu_write": 0,
+    "first_hit_ack": 80,
+    "first_miss_ack": 1,
+    "first_miss_err": 0,
+    "burst": 0,
+    "tag_we": 0,
+    "dc_addr": 0
+   }
+  },
+  "LATE_REFILL": {
+   "edges": 0,
+   "ports": {
+    "saved_addr": 0,
+    "dcram_we": 0,
+    "biu_read": 0,
+    "biu_write": 0,
+    "first_hit_ack": 0,
+    "first_miss_ack": 0,
+    "first_miss_err": 0,
+    "burst": 0,
+    "tag_we": 0,
+    "dc_addr": 0
+   }
+  },
+  "BR_LOAD": {
+   "edges": 376,
+   "ports": {
+    "saved_addr": 0,
+    "dcram_we": 0,
+    "biu_read": 376,
+    "biu_write": 0,
+    "first_hit_ack": 0,
+    "first_miss_ack": 0,
+    "first_miss_err": 0,
+    "burst": 0,
+    "tag_we": 202,
+    "dc_addr": 0
+   }
+  },
+  "BR_CI": {
+   "edges": 4,
+   "ports": {
+    "saved_addr": 0,
+    "dcram_we": 0,
+    "biu_read": 4,
+    "biu_write": 0,
+    "first_hit_ack": 0,
+    "first_miss_ack": 0,
+    "first_miss_err": 0,
+    "burst": 0,
+    "tag_we": 1,
+    "dc_addr": 0
+   }
+  },
+  "NO_ADDR_UP": {
+   "edges": 330,
+   "ports": {
+    "saved_addr": 330,
+    "dcram_we": 0,
+    "biu_read": 0,
+    "biu_write": 0,
+    "first_hit_ack": 0,
+    "first_miss_ack": 0,
+    "first_miss_err": 0,
+    "burst": 0,
+    "tag_we": 0,
+    "dc_addr": 182
+   }
+  },
+  "ERR_REFILL": {
+   "edges": 0,
+   "ports": {
+    "saved_addr": 0,
+    "dcram_we": 0,
+    "biu_read": 0,
+    "biu_write": 0,
+    "first_hit_ack": 0,
+    "first_miss_ack": 0,
+    "first_miss_err": 0,
+    "burst": 0,
+    "tag_we": 0,
+    "dc_addr": 0
+   }
+  },
+  "DWE_BR": {
+   "edges": 20,
+   "ports": {
+    "saved_addr": 0,
+    "dcram_we": 20,
+    "biu_read": 0,
+    "biu_write": 0,
+    "first_hit_ack": 0,
+    "first_miss_ack": 0,
+    "first_miss_err": 0,
+    "burst": 0,
+    "tag_we": 0,
+    "dc_addr": 0
+   }
+  },
+  "ACK_NOERR": {
+   "edges": 0,
+   "ports": {
+    "saved_addr": 0,
+    "dcram_we": 0,
+    "biu_read": 0,
+    "biu_write": 0,
+    "first_hit_ack": 0,
+    "first_miss_ack": 0,
+    "first_miss_err": 0,
+    "burst": 0,
+    "tag_we": 0,
+    "dc_addr": 0
+   }
+  },
+  "LATE_IDLE": {
+   "edges": 0,
+   "ports": {
+    "saved_addr": 0,
+    "dcram_we": 0,
+    "biu_read": 0,
+    "biu_write": 0,
+    "first_hit_ack": 0,
+    "first_miss_ack": 0,
+    "first_miss_err": 0,
+    "burst": 0,
+    "tag_we": 0,
+    "dc_addr": 0
+   }
+  },
+  "ACK_ABORT": {
+   "edges": 49,
+   "ports": {
+    "saved_addr": 0,
+    "dcram_we": 8,
+    "biu_read": 0,
+    "biu_write": 0,
+    "first_hit_ack": 49,
+    "first_miss_ack": 0,
+    "first_miss_err": 0,
+    "burst": 0,
+    "tag_we": 0,
+    "dc_addr": 0
+   }
+  }
+ },
+ "loo": {
+  "luna12.gen1": {
+   "total": 1054,
+   "EXIT_EVAL": 80,
+   "CI_COMB": 266,
+   "NO_ADDR_UP": 330,
+   "BR_LOAD": 352,
+   "LATE_REFILL": 0,
+   "ACK_EVAL": 1,
+   "ERR_REFILL": 0,
+   "CI_REFILL": 9
+  },
+  "luna12.gen2": {
+   "total": 702,
+   "EXIT_EVAL": 80,
+   "CI_COMB": 290,
+   "NO_ADDR_UP": 330,
+   "ACK_EVAL": 1,
+   "CI_REFILL": 9
+  },
+  "luna12.gen3": {
+   "total": 2589,
+   "SR": 1516,
+   "EXIT_EVAL": 80,
+   "NO_ADDR_UP": 295,
+   "CI_COMB": 261,
+   "LATE_REFILL": 0,
+   "BR_LOAD": 221,
+   "ACK_EVAL": 1,
+   "CI_REFILL": 6,
+   "DWE_BR": 19
+  },
+  "luna12.r0": {
+   "total": 1054,
+   "EXIT_EVAL": 80,
+   "CI_COMB": 266,
+   "NO_ADDR_UP": 330,
+   "BR_LOAD": 352,
+   "LATE_REFILL": 0,
+   "ACK_EVAL": 1,
+   "CI_REFILL": 9
+  },
+  "luna12.final": {
+   "total": 2269,
+   "SR": 1647,
+   "CI_COMB": 286,
+   "NO_ADDR_UP": 295,
+   "CI_REFILL": 6,
+   "ACK_EVAL": 1
+  },
+  "luna13.gen1": {
+   "total": 2564,
+   "SR": 1519,
+   "EXIT_EVAL": 80,
+   "NO_ADDR_UP": 295,
+   "CI_COMB": 255,
+   "LATE_REFILL": 0,
+   "BR_LOAD": 221,
+   "ACK_EVAL": 1
+  },
+  "luna13.gen2": {
+   "total": 1053,
+   "EXIT_EVAL": 80,
+   "CI_COMB": 266,
+   "NO_ADDR_UP": 330,
+   "BR_LOAD": 352,
+   "LATE_REFILL": 0,
+   "CI_REFILL": 9
+  },
+  "luna13.gen3": {
+   "total": 1065,
+   "EXIT_EVAL": 80,
+   "CI_COMB": 254,
+   "NO_ADDR_UP": 330,
+   "BR_LOAD": 352,
+   "LATE_REFILL": 0,
+   "ACK_EVAL": 1,
+   "DWE_BR": 19,
+   "BR_CI": 1
+  },
+  "luna13.r0": {
+   "total": 2387,
+   "SR": 1646,
+   "EXIT_EVAL": 80,
+   "NO_ADDR_UP": 295,
+   "CI_COMB": 282,
+   "LATE_REFILL": 0,
+   "ACK_EVAL": 0,
+   "ACK_CYC": 38,
+   "CI_REFILL": 6
+  },
+  "luna13.final": {
+   "total": 2563,
+   "SR": 1519,
+   "EXIT_EVAL": 80,
+   "NO_ADDR_UP": 295,
+   "CI_COMB": 255,
+   "LATE_REFILL": 0,
+   "BR_LOAD": 221
+  },
+  "luna14.gen1": {
+   "total": 1112,
+   "EXIT_EVAL": 80,
+   "CI_COMB": 261,
+   "NO_ADDR_UP": 330,
+   "BR_LOAD": 352,
+   "LATE_REFILL": 0,
+   "ACK_EVAL": 0,
+   "ERR_REFILL": 0,
+   "ACK_CYC": 38,
+   "CI_REFILL": 9,
+   "DWE_BR": 18,
+   "BR_CI": 1
+  },
+  "luna14.gen2": {
+   "total": 1074,
+   "EXIT_EVAL": 80,
+   "CI_COMB": 263,
+   "NO_ADDR_UP": 330,
+   "BR_LOAD": 352,
+   "LATE_REFILL": 0,
+   "ACK_EVAL": 1,
+   "CI_REFILL": 9,
+   "DWE_BR": 19,
+   "BR_CI": 1
+  },
+  "luna14.gen3": {
+   "total": 1005,
+   "EXIT_EVAL": 0,
+   "CI_COMB": 252,
+   "NO_ADDR_UP": 330,
+   "BR_LOAD": 352,
+   "ACK_EVAL": 0,
+   "LATE_IDLE": -80,
+   "ACK_CYC": 39,
+   "BR_CI": 1
+  },
+  "luna14.r0": {
+   "total": 1021,
+   "CI_COMB": 262,
+   "NO_ADDR_UP": 330,
+   "BR_LOAD": 352,
+   "ACK_ABORT": 47,
+   "CI_REFILL": 9,
+   "BR_CI": 1
+  },
+  "luna14.final": {
+   "total": 983,
+   "CI_COMB": 257,
+   "NO_ADDR_UP": 330,
+   "BR_LOAD": 352,
+   "DWE_BR": 19
+  }
+ }
+}

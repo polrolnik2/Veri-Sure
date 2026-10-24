@@ -1,0 +1,81 @@
+{
+ "n": 125,
+ "label_model": {
+  "P (passing requirements)": {
+   "votes": 92,
+   "true": 0.5760869565217391,
+   "estimate": 0.71290765681316
+  },
+  "C (agreement with fresh samples)": {
+   "votes": 121,
+   "true": 0.7107438016528925,
+   "estimate": 0.5387104830569381
+  },
+  "R (agreement with reference model)": {
+   "votes": 111,
+   "true": 0.4144144144144144,
+   "estimate": 0.2651564027879083
+  },
+  "moment P-R": {
+   "n": 90,
+   "observed": -0.2,
+   "independent": -0.04493827160493827,
+   "se": 0.10327955589886445
+  },
+  "moment C-P": {
+   "n": 91,
+   "observed": 0.03296703296703297,
+   "independent": 0.06339814032121725,
+   "se": 0.10477150306384174
+  },
+  "moment C-R": {
+   "n": 110,
+   "observed": 0.03636363636363636,
+   "independent": -0.07140495867768594,
+   "se": 0.09528319922260516
+  },
+  "error corr P-R": -0.16396350442458646,
+  "error corr C-P": -0.03342423883661899,
+  "error corr C-R": 0.1214099568257003
+ },
+ "verifier": {
+  "weights_all_data": {
+   "passing change /10": 0.014212777062507752,
+   "agreement change (pt)": 1.580847934421762,
+   "ref-model change (pt)": -0.1456259328570249,
+   "reported broken": -0.2491024706201919,
+   "silenced": 0.2821559579954155,
+   "passing rose": -0.056712499185386185,
+   "agreement rose >= 0.1 pt": 0.6087458428389486,
+   "bias": -0.9400945246647975
+  },
+  "current latch": {
+   "acc_better": 16,
+   "acc_worse": 23,
+   "rej_better": 29,
+   "rej_worse": 57,
+   "gains": 48.69439549905273,
+   "losses": -232.98296882274116
+  },
+  "consensus latch as built (margin 0.1, tolerance 0.5)": {
+   "acc_better": 23,
+   "acc_worse": 8,
+   "rej_better": 22,
+   "rej_worse": 72,
+   "gains": 39.74287803106941,
+   "losses": -3.4759777474691806
+  },
+  "learned verifier (p > 0.5, module held out)": {
+   "acc_better": 14,
+   "acc_worse": 5,
+   "rej_better": 31,
+   "rej_worse": 75,
+   "gains": 32.03014625430746,
+   "losses": -2.2990699569505777
+  },
+  "auc passing change": 0.5290277777777778,
+  "auc agreement change": 0.7969444444444445,
+  "auc ref-model change": 0.4236111111111111,
+  "auc learned verifier": 0.6922222222222222
+ }
+}

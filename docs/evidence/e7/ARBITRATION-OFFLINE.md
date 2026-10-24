@@ -1,0 +1,202 @@
+# Targeted arbitration, tested offline
+
+Some commits look the same to the consensus latch but go opposite ways by golden:
+- dc_fsm luna14's real fix (470 cells fixed, 3 broken);
+- sb luna12's regression (0 fixed, 1,733 broken).
+
+Both raise passing requirements and cost about 0.85 points of agreement with the peers
+(`LATCH-OFFLINE.md`). This tests whether a narrow judgment can decide such commits where the
+latch cannot. The judge is shown only the cells the commit changed, and asked which behaviour the
+spec requires. The script is `e7_behaviour/arbitration_offline.py`. Results are written to
+`ARBITRATION-OFFLINE.json` (variant 1) and `ARBITRATION-OFFLINE-v2.json` (variant 2). The judge's
+prompts and replies are kept out of the repository.
+
+## Method
+
+- **Commits.** 22 in all; golden scores 16 better and 6 worse. Each raised passing requirements,
+  and its agreement neither rose by the 0.1-point margin nor fell by 2 points.
+  - 13 are audited commits from both arms.
+  - 9 come from the live consensus-latch runs: dc_fsm luna14's refused fixes and the tolerance-1
+    smoke runs, deduplicated by behaviour.
+  - 11 of the 22 are dc_fsm luna14, and most of those share one behaviour.
+- **Excerpts.** For each commit, 4 testpoints where the design before and after the commit
+  diverge on the run's own stimulus, drawn in proportion to the cells changed.
+  - The judge sees the spec, the ports, and the testpoint's rows from reset (or the 24 rows before
+    the divergence) to the end of the divergence.
+  - The two designs are labelled X and Y. Each excerpt is asked twice with the labels swapped.
+- **The judge never sees** golden, the peers, the checks, or which candidate is the edit. It is
+  the same model as the generator.
+- **A commit is kept** when the cell-weighted vote favours the edit; a zero vote refuses.
+- **Golden scores** every cell, with golden's X values counted as don't-care.
+
+## Variant 1: spec, ports, excerpt
+
+| measure | result |
+|---|---|
+| decisive answers right per golden | 92 of 136 (68%) |
+| abstained ("undetermined" / "both wrong") | 37 of 176 |
+| same answer with labels swapped | 61 of 88 excerpts |
+| output tokens | 944k (5.4k per call) |
+
+**It decides both target commits wrongly,** with the same answer under both label orders.
+- **dc_fsm luna14's fix is refused.** On cache-inhibited reads, golden writes the cache and tag
+  RAM in the request's first evaluation cycle.
+  - The spec implies this: the cache-inhibit flag "is cleared on entry" and is set "later",
+    from the input, at the next edge.
+  - The judge takes the natural reading, that a cache-inhibited access writes nothing. That is
+    the start's defect, which all three peers share.
+  - Here the judge makes the same error as the generator.
+- **sb luna12's regression is kept.** The spec describes the module both with and without its
+  store buffer. The task's `or1200_defines.v` leaves the buffer out, and golden is the
+  pass-through. The judge did not see the configuration, so it judged by the store-buffer
+  description.
+
+## Variant 2: configuration, and rebuild the registers
+
+This variant was designed from variant 1's errors on these same commits, so it is tuned, not
+tested. It makes two changes, both generic:
+- **Configuration.** Every macro the spec names is reported defined or not, with its value. The
+  states come from preprocessing the design's own include files: for sb, `OR1200_SB_IMPLEMENTED`
+  is not defined; for byte_ctrl and bit_ctrl, the `I2C_CMD_*` codes.
+- **Procedure.** The judge must:
+  1. quote the spec sentences governing each differing output;
+  2. rebuild every register and flag they depend on, edge by edge from reset (a registered flag
+     changes only after an edge);
+  3. then compare.
+
+| measure | variant 1 | variant 2 |
+|---|---|---|
+| decisive answers right | 92 / 136 (68%) | **112 / 120 (93%)** |
+| — dc_fsm | 53 / 86 | 91 / 96 |
+| — sb | 5 / 10 | 10 / 10 |
+| — byte_ctrl | 23 / 27 | 6 / 8 |
+| — bit_ctrl | 11 / 13 | 5 / 6 |
+| abstained | 37 of 176 | 53 of 176; 48 of them on the I2C modules |
+| same answer with labels swapped | 61 / 88 | 75 / 88 |
+| output tokens | 944k | 1.69M (9.6k per call) |
+
+**Commit decisions:**
+
+| rule | kept better / worse | refused better / worse |
+|---|---|---|
+| consensus latch, tolerance 0.5 | 8 / 3 | 8 / 3 |
+| consensus latch, tolerance 1 | 13 / 5 | 3 / 1 |
+| variant 1 | 8 / 4 | 8 / 2 |
+| **variant 2** | **11 / 1** | 5 / 5 |
+| variant 2, and the tolerance-0.5 latch where it abstains (chosen after seeing the results) | 13 / 2 | 3 / 4 |
+| a perfect judge on the same excerpts | 15 / 1 | 1 / 5 |
+
+- **Both target commits are now decided correctly.** It keeps dc_fsm luna14's fix in every live
+  and audited version (+1.00 each) and refuses sb luna12's regression (−1.00).
+- **It refuses most real I2C fixes by abstaining.** Of its 64 I2C answers, 48 abstain (46 "undetermined").
+  - For byte_ctrl, 24 of its 30 abstentions are on excerpts whose start is cut off. The rebuild
+    procedure cannot start from reset there.
+  - I2C testpoints run up to 4,000 rows, because the bus clock is divided down.
+- **Its one wrong keep** is a dc_fsm luna14 commit that breaks 32 cells. It answered "after" on
+  both of that commit's 16-cell excerpts, under both label orders.
+
+## What this does and does not show
+
+- **The case is decidable from the spec, and variant 1's failure was a prompt failure.** Given
+  the configuration and made to rebuild state, the same model reads the spec correctly where the
+  generator, the peers and variant 1 did not.
+  - The same model's errors were correlated with the generator's in one framing and not in
+    another.
+- **This is not yet evidence that arbitration works.**
+  - Variant 2 was designed from these failures.
+  - Most of its dc_fsm gain is one behaviour, the first-cycle cache-inhibit writes, judged
+    correctly across several commits.
+  - Its sb gain is one configuration fact.
+  - The test that counts is commits it was not designed on.
+- **The I2C abstentions need the full history.** Run-length encoding the repeated rows would fit
+  a whole testpoint into an excerpt. Until then, abstaining and falling back to the latch is the
+  safe behaviour.
+- **Cost.** About 77k output tokens per commit judged. Only commits the latch cannot decide would
+  be sent: 22 of about 180 here.
+
+## Why variant 2 does not transfer to the I2C modules
+
+Figures come from `e7_behaviour/arbitration_why.py`. The judge's reasons are counted by keyword,
+not quoted.
+
+| | dc_fsm | sb | bit_ctrl | byte_ctrl |
+|---|---|---|---|---|
+| testpoint length, median rows | 20 | 21 | 45 | 1,078 |
+| first divergence, median row | 4 | 3.5 | 22 | 94 |
+| excerpts with the history cut off | 4 / 96 | 2 / 16 | 6 / 24 | 34 / 40 |
+| variant 2 abstentions | 0 / 96 | 6 / 16 | 18 / 24 | 30 / 40 |
+| excerpts variant 1 had right that variant 2 abstains on | 0 | 1 | 1 | 6 |
+
+Three causes. None is the judge reasoning worse on I2C.
+
+1. **The excerpt does not hold the history.**
+   - OR1200 testpoints are short, and they diverge a few rows after reset, so the excerpt shows
+     every edge from reset.
+   - byte_ctrl testpoints are long because the bus clock is divided down, and they diverge late.
+     34 of its 40 excerpts start mid-transaction, where variant 2's rebuild from reset cannot
+     begin.
+2. **The judge was not given a spec that fixes the cycle.**
+   - The dc_fsm spec gives each write enable's equation and the edge at which each flag is set.
+   - bit_ctrl's most-changed output is `al`. It depends on the filtered SDA, and the spec says
+     only that the filter's sampling interval is derived from `clk_cnt` "through `filter_cnt`";
+     it gives no formula.
+   - byte_ctrl's most-changed output is `sda_oen`. Its spec says the SCL/SDA timing belongs to the
+     child `i2c_master_bit_ctrl`, and "this module does not directly handle low-level SCL/SDA
+     timing". The judge was shown only byte_ctrl's spec.
+   - The abstention reasons agree. For byte_ctrl, 22 of 30 say the spec does not determine the
+     marked outputs, and 17 name cycle timing. For bit_ctrl, 12 of 18 name the arbitration or bus
+     state.
+3. **Variant 2 is built to refuse a guess.** Variant 1 inspects the excerpt without the step-by-step
+   rebuild, and its decisive I2C answers were right 34 of 40 times. Variant 2 abstains on 7 of the
+   16 I2C excerpts variant 1 had right.
+   - Using variant 1's answer where variant 2 abstains does not rescue the I2C commits: 4 of 8
+     decided correctly, against 5 of 8 for variant 1 alone.
+
+The differences themselves are similar in kind across modules: mostly values, not 1–3 row time
+shifts (bit_ctrl 11 of 12, byte_ctrl 15 of 20, dc_fsm 47 of 48).
+
+**What would carry it across** is the judge's input, not its model:
+- the whole testpoint, with unchanged rows collapsed so a 1,000-row I2C testpoint fits;
+- the spec of every child module the design instantiates.
+
+Where the spec still leaves the cycle open, as with bit_ctrl's filter interval, abstaining and
+falling back to the latch is the correct outcome. Arbitration can only decide what the spec
+decides.
+
+## Variants 3 and 4: fixing what the judge was shown
+
+Three of the causes above were defects in how the excerpts were built, not limits of the judge:
+- the history was cut 24 rows before the divergence;
+- byte_ctrl's child module was missing;
+- the reset description was written for OR1200. The I2C benches also hold `nReset` low and
+  SCL/SDA high.
+
+Two variants fix them:
+- **Variant 3** shows a testpoint that diverges after row 40 from reset, with each run of
+  identical rows collapsed into one line. byte_ctrl's longest testpoint goes from 949 rows to
+  105 lines. It adds each child module's specification and macros, and takes the reset sequence
+  from the module's own bench.
+- **Variant 4** also adds the child's ports as columns, probed in each candidate's own simulation
+  (`byte_child_drive.py`). byte_ctrl's bus pins come straight from the benchmark's reference bit
+  controller, identical in both candidates. So they differ only because the byte FSM drives
+  different `cmd` / `din` into it, a median 5 rows earlier.
+
+Prompts that neither variant changes are byte-identical to variant 2's and reuse its answers.
+
+| | variant 2 | variant 3 | variant 4 |
+|---|---|---|---|
+| decisive answers right | 112 / 120 | 139 / 151 | 132 / 139 |
+| — bit_ctrl | 5 / 6 | 10 / 10 | 10 / 10 |
+| — byte_ctrl | 6 / 8 | 28 / 35 | 21 / 23 |
+| I2C abstentions | 48 of 64 | 17 of 64 | 29 of 64 (15 of them "both wrong" on byte_ctrl) |
+| commits kept better / worse | 11 / 1 | 14 / 2 | **15 / 1** |
+| commits refused better / worse | 5 / 5 | 2 / 4 | 1 / 5 |
+| new output tokens | 1.69M (all) | 1.13M (70 calls) | 0.88M (40 byte_ctrl calls) |
+
+- **Variant 4 decides every commit as a perfect judge on the same excerpts would:** 20 of 22.
+  - The two it misses are a dc_fsm luna14 regression it is wrong about, and a byte_ctrl fix whose
+    sampled excerpts mostly show the edit breaking things.
+- **byte_ctrl's 15 "both wrong" answers in variant 4 are plausibly right.** With the child's
+  `cmd` visible, both candidates can be seen sending READ (code 8) for a write request: the
+  command-code misreading the start and its peers share.
+- **The same caveat as before applies:** every variant was designed on these commits.

@@ -1,0 +1,398 @@
+{
+ "prefix": "smokem6-",
+ "jobs": [
+  {
+   "run": "luna14",
+   "module": "or1200_dc_fsm",
+   "arm": "cons-fv",
+   "commits": [
+    {
+     "how": "refused",
+     "passing": "65 -> 72",
+     "agreement": [
+      "99.81",
+      "98.96"
+     ],
+     "judge_score": null,
+     "judge_tokens": null,
+     "golden_net": 465,
+     "golden_fixed": 470,
+     "golden_broken": 5
+    }
+   ],
+   "replay_reproduces": true,
+   "unresolved_edits": 0,
+   "edge_start": 0.9584621643612693,
+   "edge_final": 0.9584621643612693,
+   "tp_start": 0.7090336134453782,
+   "tp_final": 0.7090336134453782,
+   "cells_fixed": 0,
+   "cells_broken": 0,
+   "editor_output_tokens": 66978,
+   "judge_output_tokens": 0
+  },
+  {
+   "run": "luna14",
+   "module": "or1200_dc_fsm",
+   "arm": "cons-fv-arb",
+   "commits": [
+    {
+     "how": "spec judge",
+     "passing": "65 -> 74",
+     "agreement": [
+      "99.81",
+      "99.78"
+     ],
+     "judge_score": 1.0,
+     "judge_tokens": 50938,
+     "golden_net": 75,
+     "golden_fixed": 77,
+     "golden_broken": 2
+    }
+   ],
+   "replay_reproduces": true,
+   "unresolved_edits": 0,
+   "edge_start": 0.9584621643612693,
+   "edge_final": 0.9607811228641172,
+   "tp_start": 0.7090336134453782,
+   "tp_final": 0.7552521008403361,
+   "cells_fixed": 77,
+   "cells_broken": 2,
+   "editor_output_tokens": 37208,
+   "judge_output_tokens": 50938
+  },
+  {
+   "run": "luna12",
+   "module": "or1200_sb",
+   "arm": "cons-fv",
+   "commits": [
+    {
+     "how": "refused",
+     "passing": "61 -> 62",
+     "agreement": [
+      "86.04",
+      "50.57"
+     ],
+     "judge_score": null,
+     "judge_tokens": null,
+     "golden_net": -11210,
+     "golden_fixed": 7364,
+     "golden_broken": 18574
+    },
+    {
+     "how": "refused",
+     "passing": "61 -> 63",
+     "agreement": [
+      "86.04",
+      "85.02"
+     ],
+     "judge_score": null,
+     "judge_tokens": null,
+     "golden_net": -4065,
+     "golden_fixed": 0,
+     "golden_broken": 4065
+    },
+    {
+     "how": "tolerance",
+     "passing": "61 -> 64",
+     "agreement": [
+      "86.04",
+      "85.84"
+     ],
+     "judge_score": null,
+     "judge_tokens": null,
+     "golden_net": -9904,
+     "golden_fixed": 93,
+     "golden_broken": 9997
+    }
+   ],
+   "replay_reproduces": true,
+   "unresolved_edits": 0,
+   "edge_start": 0.5609846676216245,
+   "edge_final": 0.4453817178630166,
+   "tp_start": 0.36684782608695654,
+   "tp_final": 0.34103260869565216,
+   "cells_fixed": 93,
+   "cells_broken": 9997,
+   "editor_output_tokens": 105798,
+   "judge_output_tokens": 0
+  },
+  {
+   "run": "luna12",
+   "module": "or1200_sb",
+   "arm": "cons-fv-arb",
+   "commits": [
+    {
+     "how": "refused",
+     "passing": "61 -> 62",
+     "agreement": [
+      "86.04",
+      "50.57"
+     ],
+     "judge_score": null,
+     "judge_tokens": null,
+     "golden_net": -11210,
+     "golden_fixed": 7364,
+     "golden_broken": 18574
+    },
+    {
+     "how": "refused",
+     "passing": "61 -> 64",
+     "agreement": [
+      "86.04",
+      "85.90"
+     ],
+     "judge_score": -1.0,
+     "judge_tokens": 20985,
+     "golden_net": -9896,
+     "golden_fixed": 87,
+     "golden_broken": 9983
+    },
+    {
+     "how": "spec judge",
+     "passing": "61 -> 63",
+     "agreement": [
+      "86.04",
+      "85.06"
+     ],
+     "judge_score": 0.23809523809523808,
+     "judge_tokens": 17854,
+     "golden_net": -1171,
+     "golden_fixed": 632,
+     "golden_broken": 1803
+    },
+    {
+     "how": "agreement rose",
+     "passing": "63 -> 64",
+     "agreement": [
+      "85.06",
+      "86.12"
+     ],
+     "judge_score": null,
+     "judge_tokens": null,
+     "golden_net": -394,
+     "golden_fixed": 238,
+     "golden_broken": 632
+    }
+   ],
+   "replay_reproduces": true,
+   "unresolved_edits": 0,
+   "edge_start": 0.5609846676216245,
+   "edge_final": 0.5449095442729057,
+   "tp_start": 0.36684782608695654,
+   "tp_final": 0.35733695652173914,
+   "cells_fixed": 0,
+   "cells_broken": 1565,
+   "editor_output_tokens": 99657,
+   "judge_output_tokens": 38839
+  },
+  {
+   "run": "luna12",
+   "module": "i2c_master_byte_ctrl",
+   "arm": "cons-fv",
+   "commits": [
+    {
+     "how": "refused",
+     "passing": "52 -> 52",
+     "agreement": [
+      "63.73",
+      "63.73"
+     ],
+     "judge_score": null,
+     "judge_tokens": null,
+     "golden_net": 0,
+     "golden_fixed": 0,
+     "golden_broken": 0
+    },
+    {
+     "how": "tolerance",
+     "passing": "52 -> 53",
+     "agreement": [
+      "63.73",
+      "63.70"
+     ],
+     "judge_score": null,
+     "judge_tokens": null,
+     "golden_net": -159,
+     "golden_fixed": 0,
+     "golden_broken": 159
+    },
+    {
+     "how": "refused",
+     "passing": "53 -> 62",
+     "agreement": [
+      "63.70",
+      "59.46"
+     ],
+     "judge_score": null,
+     "judge_tokens": null,
+     "golden_net": -55417,
+     "golden_fixed": 8594,
+     "golden_broken": 64011
+    }
+   ],
+   "replay_reproduces": true,
+   "unresolved_edits": 0,
+   "edge_start": 0.4271464412481647,
+   "edge_final": 0.42705556585080756,
+   "tp_start": 0.2704598597038192,
+   "tp_final": 0.269680436477007,
+   "cells_fixed": 0,
+   "cells_broken": 159,
+   "editor_output_tokens": 120742,
+   "judge_output_tokens": 0
+  },
+  {
+   "run": "luna12",
+   "module": "i2c_master_byte_ctrl",
+   "arm": "cons-fv-arb",
+   "commits": [
+    {
+     "how": "refused",
+     "passing": "52 -> 52",
+     "agreement": [
+      "63.73",
+      "63.73"
+     ],
+     "judge_score": null,
+     "judge_tokens": null,
+     "golden_net": 0,
+     "golden_fixed": 0,
+     "golden_broken": 0
+    },
+    {
+     "how": "refused",
+     "passing": "52 -> 60",
+     "agreement": [
+      "63.73",
+      "56.17"
+     ],
+     "judge_score": null,
+     "judge_tokens": null,
+     "golden_net": -85925,
+     "golden_fixed": 15571,
+     "golden_broken": 101496
+    }
+   ],
+   "replay_reproduces": true,
+   "unresolved_edits": 0,
+   "edge_start": 0.4271464412481647,
+   "edge_final": 0.4271464412481647,
+   "tp_start": 0.2704598597038192,
+   "tp_final": 0.2704598597038192,
+   "cells_fixed": 0,
+   "cells_broken": 0,
+   "editor_output_tokens": 149378,
+   "judge_output_tokens": 0
+  },
+  {
+   "run": "luna12",
+   "module": "i2c_master_bit_ctrl",
+   "arm": "cons-fv",
+   "commits": [
+    {
+     "how": "refused",
+     "passing": "77 -> 79",
+     "agreement": [
+      "86.12",
+      "83.47"
+     ],
+     "judge_score": null,
+     "judge_tokens": null,
+     "golden_net": -10306,
+     "golden_fixed": 7213,
+     "golden_broken": 17519
+    },
+    {
+     "how": "refused",
+     "passing": "77 -> 83",
+     "agreement": [
+      "86.12",
+      "84.98"
+     ],
+     "judge_score": null,
+     "judge_tokens": null,
+     "golden_net": -2275,
+     "golden_fixed": 3679,
+     "golden_broken": 5954
+    },
+    {
+     "how": "refused",
+     "passing": "77 -> 83",
+     "agreement": [
+      "86.12",
+      "84.92"
+     ],
+     "judge_score": null,
+     "judge_tokens": null,
+     "golden_net": -1899,
+     "golden_fixed": 3745,
+     "golden_broken": 5644
+    },
+    {
+     "how": "refused",
+     "passing": "77 -> 82",
+     "agreement": [
+      "86.12",
+      "84.84"
+     ],
+     "judge_score": null,
+     "judge_tokens": null,
+     "golden_net": -2202,
+     "golden_fixed": 3513,
+     "golden_broken": 5715
+    },
+    {
+     "how": "refused",
+     "passing": null,
+     "agreement": null,
+     "judge_score": null,
+     "judge_tokens": null,
+     "golden_net": -1899,
+     "golden_fixed": 3745,
+     "golden_broken": 5644
+    }
+   ],
+   "replay_reproduces": true,
+   "unresolved_edits": 0,
+   "edge_start": 0.1844662028740863,
+   "edge_final": 0.1844662028740863,
+   "tp_start": 0.032044198895027624,
+   "tp_final": 0.032044198895027624,
+   "cells_fixed": 0,
+   "cells_broken": 0,
+   "editor_output_tokens": 164694,
+   "judge_output_tokens": 0
+  },
+  {
+   "run": "luna12",
+   "module": "i2c_master_bit_ctrl",
+   "arm": "cons-fv-arb",
+   "commits": [
+    {
+     "how": "spec judge",
+     "passing": "77 -> 80",
+     "agreement": [
+      "86.12",
+      "84.95"
+     ],
+     "judge_score": 0.25555555555555554,
+     "judge_tokens": 110876,
+     "golden_net": -4068,
+     "golden_fixed": 5343,
+     "golden_broken": 9411
+    }
+   ],
+   "replay_reproduces": true,
+   "unresolved_edits": 0,
+   "edge_start": 0.1844662028740863,
+   "edge_final": 0.1851023692473396,
+   "tp_start": 0.032044198895027624,
+   "tp_final": 0.027624309392265192,
+   "cells_fixed": 5343,
+   "cells_broken": 9411,
+   "editor_output_tokens": 149719,
+   "judge_output_tokens": 110876
+  }
+ ]
+}

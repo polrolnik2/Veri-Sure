@@ -1,0 +1,120 @@
+{
+  "run": "/home/user/runs-cf/luna14/i2c_master_byte_ctrl",
+  "module": "i2c_master_byte_ctrl",
+  "bodies": 99,
+  "requirements": 98,
+  "set": "shipped",
+  "trials": 20,
+  "rounds": 0,
+  "feedback": "checks",
+  "extra_sources": [
+    "/home/user/Veri-Sure/benchmarks/chipverilog/Des/i2c/i2c_master_bit_ctrl/i2c_master_bit_ctrl.v"
+  ],
+  "include_dirs": [
+    "/home/user/Veri-Sure/benchmarks/chipverilog/Des/i2c/i2c_master_byte_ctrl",
+    "/home/user/Veri-Sure/benchmarks/chipverilog/Des/i2c"
+  ],
+  "seconds": 739,
+  "history": [
+    {
+      "round": 0,
+      "requirements": 98,
+      "pass": 65,
+      "fail": 21,
+      "abstain": 12,
+      "failing_check_instances": 548,
+      "failing": [
+        "REQ-0003",
+        "REQ-0012",
+        "REQ-0013",
+        "REQ-0014",
+        "REQ-0015",
+        "REQ-0026",
+        "REQ-0028",
+        "REQ-0031",
+        "REQ-0047",
+        "REQ-0049",
+        "REQ-0062",
+        "REQ-0063",
+        "REQ-0069",
+        "REQ-0070",
+        "REQ-0074",
+        "REQ-0084",
+        "REQ-0098",
+        "REQ-0116",
+        "REQ-0117",
+        "REQ-0121",
+        "REQ-0122"
+      ],
+      "abstaining": [
+        "REQ-0001",
+        "REQ-0002",
+        "REQ-0008",
+        "REQ-0046",
+        "REQ-0058",
+        "REQ-0067",
+        "REQ-0068",
+        "REQ-0077",
+        "REQ-0086",
+        "REQ-0091",
+        "REQ-0096",
+        "REQ-0100"
+      ],
+      "rtl_lines": 250
+    }
+  ],
+  "final": {
+    "round": 0,
+    "requirements": 98,
+    "pass": 65,
+    "fail": 21,
+    "abstain": 12,
+    "failing_check_instances": 548,
+    "failing": [
+      "REQ-0003",
+      "REQ-0012",
+      "REQ-0013",
+      "REQ-0014",
+      "REQ-0015",
+      "REQ-0026",
+      "REQ-0028",
+      "REQ-0031",
+      "REQ-0047",
+      "REQ-0049",
+      "REQ-0062",
+      "REQ-0063",
+      "REQ-0069",
+      "REQ-0070",
+      "REQ-0074",
+      "REQ-0084",
+      "REQ-0098",
+      "REQ-0116",
+      "REQ-0117",
+      "REQ-0121",
+      "REQ-0122"
+    ],
+    "abstaining": [
+      "REQ-0001",
+      "REQ-0002",
+      "REQ-0008",
+      "REQ-0046",
+      "REQ-0058",
+      "REQ-0067",
+      "REQ-0068",
+      "REQ-0077",
+      "REQ-0086",
+      "REQ-0091",
+      "REQ-0096",
+      "REQ-0100"
+    ],
+    "rtl_lines": 250
+  },
+  "usage": {
+    "input": 34466,
+    "cached": 26262,
+    "output": 15473,
+    "reasoning": 0,
+    "calls": 2,
+    "cache_hit_rate": 0.762
+  }
+}

@@ -1,0 +1,1814 @@
+{
+ "variant": "4",
+ "k": 4,
+ "horizon": 16,
+ "effort": "xhigh",
+ "commits": [
+  {
+   "source": "cf-checks bit_ctrl luna12 commit 12",
+   "run": "luna12",
+   "mod": "i2c_master_bit_ctrl",
+   "dpass": 2,
+   "dcons": -0.012579857608584452,
+   "golden_net": 9608,
+   "golden_net_own": 1704,
+   "episodes_total": 21,
+   "cells_total": 306,
+   "asked": [
+    {
+     "tp": "TP-0343",
+     "first": 666,
+     "end": 681,
+     "cells": 16,
+     "before_ok": 1,
+     "after_ok": 15,
+     "answers": [
+      "after",
+      "undetermined"
+     ],
+     "tokens": [
+      12536,
+      12383
+     ]
+    },
+    {
+     "tp": "TP-0069",
+     "first": 120,
+     "end": 129,
+     "cells": 10,
+     "before_ok": 0,
+     "after_ok": 10,
+     "answers": [
+      "undetermined",
+      "undetermined"
+     ],
+     "tokens": [
+      9277,
+      18395
+     ]
+    },
+    {
+     "tp": "TP-0437",
+     "first": 11,
+     "end": 26,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "undetermined",
+      "undetermined"
+     ],
+     "tokens": [
+      6266,
+      11819
+     ]
+    },
+    {
+     "tp": "TP-0062",
+     "first": 20,
+     "end": 33,
+     "cells": 12,
+     "before_ok": 0,
+     "after_ok": 12,
+     "answers": [
+      "undetermined",
+      "undetermined"
+     ],
+     "tokens": [
+      7511,
+      10361
+     ]
+    }
+   ],
+   "arbiter": true,
+   "score": 0.14814814814814814,
+   "oracle": true
+  },
+  {
+   "source": "cf-checks bit_ctrl luna12 commit 16",
+   "run": "luna12",
+   "mod": "i2c_master_bit_ctrl",
+   "dpass": 1,
+   "dcons": 7.675101969210434e-05,
+   "golden_net": -15,
+   "golden_net_own": -15,
+   "episodes_total": 8,
+   "cells_total": 52,
+   "asked": [
+    {
+     "tp": "TP-0448",
+     "first": 20,
+     "end": 30,
+     "cells": 5,
+     "before_ok": 3,
+     "after_ok": 2,
+     "answers": [
+      "undetermined",
+      "undetermined"
+     ],
+     "tokens": [
+      17617,
+      25519
+     ]
+    },
+    {
+     "tp": "TP-0425",
+     "first": 39,
+     "end": 53,
+     "cells": 13,
+     "before_ok": 9,
+     "after_ok": 4,
+     "answers": [
+      "before",
+      "before"
+     ],
+     "tokens": [
+      17554,
+      19958
+     ]
+    },
+    {
+     "tp": "TP-0062",
+     "first": 24,
+     "end": 31,
+     "cells": 4,
+     "before_ok": 4,
+     "after_ok": 0,
+     "answers": [
+      "undetermined",
+      "before"
+     ],
+     "tokens": [
+      15995,
+      14822
+     ]
+    },
+    {
+     "tp": "TP-0466",
+     "first": 22,
+     "end": 37,
+     "cells": 13,
+     "before_ok": 7,
+     "after_ok": 6,
+     "answers": [
+      "undetermined",
+      "before"
+     ],
+     "tokens": [
+      35207,
+      28217
+     ]
+    }
+   ],
+   "arbiter": false,
+   "score": -0.6142857142857143,
+   "oracle": false
+  },
+  {
+   "source": "cf-checks byte_ctrl luna12 commit 6",
+   "run": "luna12",
+   "mod": "i2c_master_byte_ctrl",
+   "dpass": 1,
+   "dcons": 0.0006102374217271667,
+   "golden_net": 14098,
+   "golden_net_own": 2781,
+   "episodes_total": 7,
+   "cells_total": 102,
+   "asked": [
+    {
+     "tp": "TP-0053",
+     "first": 866,
+     "end": 881,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "both wrong",
+      "after"
+     ],
+     "tokens": [
+      17185,
+      16992
+     ]
+    },
+    {
+     "tp": "TP-0370",
+     "first": 219,
+     "end": 234,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "after",
+      "both wrong"
+     ],
+     "tokens": [
+      24218,
+      30509
+     ]
+    },
+    {
+     "tp": "TP-0348",
+     "first": 92,
+     "end": 103,
+     "cells": 12,
+     "before_ok": 0,
+     "after_ok": 12,
+     "answers": [
+      "both wrong",
+      "after"
+     ],
+     "tokens": [
+      30068,
+      23871
+     ]
+    },
+    {
+     "tp": "TP-0002",
+     "first": 104,
+     "end": 113,
+     "cells": 10,
+     "before_ok": 0,
+     "after_ok": 10,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      22281,
+      33711
+     ]
+    }
+   ],
+   "arbiter": true,
+   "score": 0.5925925925925926,
+   "oracle": true
+  },
+  {
+   "source": "cf-checks byte_ctrl luna12 commit 11",
+   "run": "luna12",
+   "mod": "i2c_master_byte_ctrl",
+   "dpass": 1,
+   "dcons": 0.0005964578670430062,
+   "golden_net": 447,
+   "golden_net_own": 197,
+   "episodes_total": 13,
+   "cells_total": 52,
+   "asked": [
+    {
+     "tp": "TP-0406",
+     "first": 210,
+     "end": 225,
+     "cells": 16,
+     "before_ok": 16,
+     "after_ok": 0,
+     "answers": [
+      "both wrong",
+      "before"
+     ],
+     "tokens": [
+      26604,
+      18910
+     ]
+    },
+    {
+     "tp": "TP-0288",
+     "first": 15,
+     "end": 20,
+     "cells": 6,
+     "before_ok": 6,
+     "after_ok": 0,
+     "answers": [
+      "before",
+      "before"
+     ],
+     "tokens": [
+      9174,
+      9569
+     ]
+    },
+    {
+     "tp": "TP-0279",
+     "first": 10,
+     "end": 18,
+     "cells": 9,
+     "before_ok": 9,
+     "after_ok": 0,
+     "answers": [
+      "before",
+      "before"
+     ],
+     "tokens": [
+      11387,
+      11699
+     ]
+    },
+    {
+     "tp": "TP-0033",
+     "first": 15,
+     "end": 16,
+     "cells": 2,
+     "before_ok": 2,
+     "after_ok": 0,
+     "answers": [
+      "before",
+      "before"
+     ],
+     "tokens": [
+      11129,
+      14855
+     ]
+    }
+   ],
+   "arbiter": false,
+   "score": -0.7575757575757576,
+   "oracle": false
+  },
+  {
+   "source": "cf-checks byte_ctrl luna12 commit 15",
+   "run": "luna12",
+   "mod": "i2c_master_byte_ctrl",
+   "dpass": 1,
+   "dcons": -0.006858281217089017,
+   "golden_net": -5987,
+   "golden_net_own": -2620,
+   "episodes_total": 10,
+   "cells_total": 45,
+   "asked": [
+    {
+     "tp": "TP-0182",
+     "first": 50,
+     "end": 50,
+     "cells": 1,
+     "before_ok": 1,
+     "after_ok": 0,
+     "answers": [
+      "before",
+      "before"
+     ],
+     "tokens": [
+      19930,
+      14859
+     ]
+    },
+    {
+     "tp": "TP-0188",
+     "first": 94,
+     "end": 107,
+     "cells": 12,
+     "before_ok": 12,
+     "after_ok": 0,
+     "answers": [
+      "both wrong",
+      "both wrong"
+     ],
+     "tokens": [
+      41899,
+      34563
+     ]
+    },
+    {
+     "tp": "TP-0189",
+     "first": 94,
+     "end": 107,
+     "cells": 12,
+     "before_ok": 12,
+     "after_ok": 0,
+     "answers": [
+      "both wrong",
+      "both wrong"
+     ],
+     "tokens": [
+      26532,
+      40704
+     ]
+    },
+    {
+     "tp": "TP-0111",
+     "first": 50,
+     "end": 50,
+     "cells": 1,
+     "before_ok": 1,
+     "after_ok": 0,
+     "answers": [
+      "before",
+      "both wrong"
+     ],
+     "tokens": [
+      18891,
+      29902
+     ]
+    }
+   ],
+   "arbiter": false,
+   "score": -0.057692307692307696,
+   "oracle": false
+  },
+  {
+   "source": "cf-checks dc_fsm luna13 commit 1",
+   "run": "luna13",
+   "mod": "or1200_dc_fsm",
+   "dpass": 8,
+   "dcons": -0.007533197139938719,
+   "golden_net": 468,
+   "golden_net_own": 163,
+   "episodes_total": 22,
+   "cells_total": 165,
+   "asked": [
+    {
+     "tp": "TP-0237",
+     "first": 2,
+     "end": 2,
+     "cells": 1,
+     "before_ok": 0,
+     "after_ok": 1,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      1896,
+      7367
+     ]
+    },
+    {
+     "tp": "TP-0238",
+     "first": 6,
+     "end": 20,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      9886,
+      9319
+     ]
+    },
+    {
+     "tp": "TP-0163",
+     "first": 4,
+     "end": 18,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      9438,
+      9925
+     ]
+    },
+    {
+     "tp": "TP-0067",
+     "first": 5,
+     "end": 19,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      8400,
+      13265
+     ]
+    }
+   ],
+   "arbiter": true,
+   "score": 1.0,
+   "oracle": true
+  },
+  {
+   "source": "cf-checks dc_fsm luna14 commit 1",
+   "run": "luna14",
+   "mod": "or1200_dc_fsm",
+   "dpass": 7,
+   "dcons": -0.010250654695099152,
+   "golden_net": 385,
+   "golden_net_own": 148,
+   "episodes_total": 30,
+   "cells_total": 216,
+   "asked": [
+    {
+     "tp": "TP-0212",
+     "first": 4,
+     "end": 18,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      8835,
+      14018
+     ]
+    },
+    {
+     "tp": "TP-0279",
+     "first": 13,
+     "end": 17,
+     "cells": 8,
+     "before_ok": 0,
+     "after_ok": 8,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      10980,
+      9793
+     ]
+    },
+    {
+     "tp": "TP-0213",
+     "first": 6,
+     "end": 20,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      9886,
+      9319
+     ]
+    },
+    {
+     "tp": "TP-0137",
+     "first": 6,
+     "end": 20,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      9459,
+      8867
+     ]
+    }
+   ],
+   "arbiter": true,
+   "score": 1.0,
+   "oracle": true
+  },
+  {
+   "source": "cf-checks sb luna12 commit 1",
+   "run": "luna12",
+   "mod": "or1200_sb",
+   "dpass": 3,
+   "dcons": -0.00857432775240996,
+   "golden_net": -1733,
+   "golden_net_own": -111,
+   "episodes_total": 6,
+   "cells_total": 62,
+   "asked": [
+    {
+     "tp": "TP-0101",
+     "first": 1,
+     "end": 15,
+     "cells": 16,
+     "before_ok": 16,
+     "after_ok": 0,
+     "answers": [
+      "before",
+      "before"
+     ],
+     "tokens": [
+      843,
+      1149
+     ]
+    },
+    {
+     "tp": "TP-0237",
+     "first": 4,
+     "end": 18,
+     "cells": 8,
+     "before_ok": 8,
+     "after_ok": 0,
+     "answers": [
+      "before",
+      "before"
+     ],
+     "tokens": [
+      1729,
+      1171
+     ]
+    },
+    {
+     "tp": "TP-0109",
+     "first": 2,
+     "end": 16,
+     "cells": 16,
+     "before_ok": 16,
+     "after_ok": 0,
+     "answers": [
+      "before",
+      "before"
+     ],
+     "tokens": [
+      958,
+      1351
+     ]
+    },
+    {
+     "tp": "TP-0208",
+     "first": 5,
+     "end": 5,
+     "cells": 7,
+     "before_ok": 7,
+     "after_ok": 0,
+     "answers": [
+      "before",
+      "before"
+     ],
+     "tokens": [
+      1610,
+      1962
+     ]
+    }
+   ],
+   "arbiter": false,
+   "score": -1.0,
+   "oracle": false
+  },
+  {
+   "source": "cf-model bit_ctrl luna12 commit 9",
+   "run": "luna12",
+   "mod": "i2c_master_bit_ctrl",
+   "dpass": 1,
+   "dcons": -0.015218630761808702,
+   "golden_net": -1993,
+   "golden_net_own": -1330,
+   "episodes_total": 40,
+   "cells_total": 415,
+   "asked": [
+    {
+     "tp": "TP-0102",
+     "first": 3,
+     "end": 18,
+     "cells": 8,
+     "before_ok": 6,
+     "after_ok": 2,
+     "answers": [
+      "both wrong",
+      "before"
+     ],
+     "tokens": [
+      13751,
+      15781
+     ]
+    },
+    {
+     "tp": "TP-0057",
+     "first": 22,
+     "end": 37,
+     "cells": 17,
+     "before_ok": 9,
+     "after_ok": 8,
+     "answers": [
+      "before",
+      "undetermined"
+     ],
+     "tokens": [
+      14992,
+      12066
+     ]
+    },
+    {
+     "tp": "TP-0480",
+     "first": 113,
+     "end": 117,
+     "cells": 5,
+     "before_ok": 2,
+     "after_ok": 3,
+     "answers": [
+      "after",
+      "undetermined"
+     ],
+     "tokens": [
+      18396,
+      17933
+     ]
+    },
+    {
+     "tp": "TP-0328",
+     "first": 21,
+     "end": 36,
+     "cells": 16,
+     "before_ok": 16,
+     "after_ok": 0,
+     "answers": [
+      "before",
+      "before"
+     ],
+     "tokens": [
+      21308,
+      19310
+     ]
+    }
+   ],
+   "arbiter": false,
+   "score": -0.5652173913043478,
+   "oracle": false
+  },
+  {
+   "source": "cf-model byte_ctrl luna12 commit 7",
+   "run": "luna12",
+   "mod": "i2c_master_byte_ctrl",
+   "dpass": 1,
+   "dcons": -0.007738204209063404,
+   "golden_net": 62269,
+   "golden_net_own": 10574,
+   "episodes_total": 30,
+   "cells_total": 446,
+   "asked": [
+    {
+     "tp": "TP-0146",
+     "first": 49,
+     "end": 64,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      12980,
+      10177
+     ]
+    },
+    {
+     "tp": "TP-0102",
+     "first": 209,
+     "end": 211,
+     "cells": 3,
+     "before_ok": 3,
+     "after_ok": 0,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      15280,
+      28158
+     ]
+    },
+    {
+     "tp": "TP-0051",
+     "first": 930,
+     "end": 945,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 0,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      16241,
+      18225
+     ]
+    },
+    {
+     "tp": "TP-0382",
+     "first": 57,
+     "end": 72,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "after",
+      "both wrong"
+     ],
+     "tokens": [
+      16213,
+      16211
+     ]
+    }
+   ],
+   "arbiter": true,
+   "score": 0.8431372549019608,
+   "oracle": true
+  },
+  {
+   "source": "cf-model byte_ctrl luna12 commit 9",
+   "run": "luna12",
+   "mod": "i2c_master_byte_ctrl",
+   "dpass": 1,
+   "dcons": -0.001582680280866694,
+   "golden_net": 11436,
+   "golden_net_own": 2358,
+   "episodes_total": 15,
+   "cells_total": 198,
+   "asked": [
+    {
+     "tp": "TP-0341",
+     "first": 249,
+     "end": 264,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "after",
+      "both wrong"
+     ],
+     "tokens": [
+      19944,
+      32816
+     ]
+    },
+    {
+     "tp": "TP-0370",
+     "first": 219,
+     "end": 234,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      21745,
+      31547
+     ]
+    },
+    {
+     "tp": "TP-0348",
+     "first": 92,
+     "end": 103,
+     "cells": 12,
+     "before_ok": 0,
+     "after_ok": 12,
+     "answers": [
+      "both wrong",
+      "both wrong"
+     ],
+     "tokens": [
+      25816,
+      31916
+     ]
+    },
+    {
+     "tp": "TP-0115",
+     "first": 219,
+     "end": 234,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "both wrong",
+      "both wrong"
+     ],
+     "tokens": [
+      25218,
+      19517
+     ]
+    }
+   ],
+   "arbiter": true,
+   "score": 0.4,
+   "oracle": true
+  },
+  {
+   "source": "cf-model dc_fsm luna14 commit 1",
+   "run": "luna14",
+   "mod": "or1200_dc_fsm",
+   "dpass": 8,
+   "dcons": -0.008454919566030691,
+   "golden_net": 470,
+   "golden_net_own": 183,
+   "episodes_total": 28,
+   "cells_total": 183,
+   "asked": [
+    {
+     "tp": "TP-0019",
+     "first": 5,
+     "end": 19,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      12710,
+      8142
+     ]
+    },
+    {
+     "tp": "TP-0025",
+     "first": 2,
+     "end": 2,
+     "cells": 1,
+     "before_ok": 0,
+     "after_ok": 1,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      13414,
+      4165
+     ]
+    },
+    {
+     "tp": "TP-0261",
+     "first": 4,
+     "end": 18,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      10194,
+      14011
+     ]
+    },
+    {
+     "tp": "TP-0213",
+     "first": 6,
+     "end": 20,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      9886,
+      9319
+     ]
+    }
+   ],
+   "arbiter": true,
+   "score": 1.0,
+   "oracle": true
+  },
+  {
+   "source": "cf-model sb luna13 commit 7",
+   "run": "luna13",
+   "mod": "or1200_sb",
+   "dpass": 3,
+   "dcons": 0.0,
+   "golden_net": -578,
+   "golden_net_own": -516,
+   "episodes_total": 15,
+   "cells_total": 612,
+   "asked": [
+    {
+     "tp": "TP-0179",
+     "first": 5,
+     "end": 20,
+     "cells": 48,
+     "before_ok": 16,
+     "after_ok": 16,
+     "answers": [
+      "both wrong",
+      "both wrong"
+     ],
+     "tokens": [
+      2764,
+      2120
+     ]
+    },
+    {
+     "tp": "TP-0203",
+     "first": 3,
+     "end": 18,
+     "cells": 48,
+     "before_ok": 0,
+     "after_ok": 48,
+     "answers": [
+      "both wrong",
+      "after"
+     ],
+     "tokens": [
+      6505,
+      1239
+     ]
+    },
+    {
+     "tp": "TP-0216",
+     "first": 404,
+     "end": 419,
+     "cells": 48,
+     "before_ok": 48,
+     "after_ok": 0,
+     "answers": [
+      "before",
+      "before"
+     ],
+     "tokens": [
+      3780,
+      3243
+     ]
+    },
+    {
+     "tp": "TP-0236",
+     "first": 3,
+     "end": 18,
+     "cells": 48,
+     "before_ok": 0,
+     "after_ok": 48,
+     "answers": [
+      "both wrong",
+      "both wrong"
+     ],
+     "tokens": [
+      3612,
+      4266
+     ]
+    }
+   ],
+   "arbiter": false,
+   "score": -0.125,
+   "oracle": true
+  },
+  {
+   "source": "live val-cons-fv dc_fsm luna14 commit 2",
+   "run": "luna14",
+   "mod": "or1200_dc_fsm",
+   "dpass": 4,
+   "dcons": -0.0007108118219229335,
+   "golden_net": 63,
+   "golden_net_own": 28,
+   "episodes_total": 19,
+   "cells_total": 44,
+   "asked": [
+    {
+     "tp": "TP-0135",
+     "first": 1,
+     "end": 1,
+     "cells": 1,
+     "before_ok": 0,
+     "after_ok": 1,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      6527,
+      2639
+     ]
+    },
+    {
+     "tp": "TP-0004",
+     "first": 2,
+     "end": 2,
+     "cells": 2,
+     "before_ok": 0,
+     "after_ok": 2,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      7201,
+      5389
+     ]
+    },
+    {
+     "tp": "TP-0286",
+     "first": 1,
+     "end": 1,
+     "cells": 1,
+     "before_ok": 0,
+     "after_ok": 1,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      8567,
+      7557
+     ]
+    },
+    {
+     "tp": "TP-0017",
+     "first": 2,
+     "end": 2,
+     "cells": 1,
+     "before_ok": 0,
+     "after_ok": 1,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      3241,
+      8192
+     ]
+    }
+   ],
+   "arbiter": true,
+   "score": 1.0,
+   "oracle": true
+  },
+  {
+   "source": "live val-cons-fv dc_fsm luna14 commit 3",
+   "run": "luna14",
+   "mod": "or1200_dc_fsm",
+   "dpass": 9,
+   "dcons": -0.00026187803965582734,
+   "golden_net": 75,
+   "golden_net_own": 36,
+   "episodes_total": 19,
+   "cells_total": 36,
+   "asked": [
+    {
+     "tp": "TP-0121",
+     "first": 2,
+     "end": 2,
+     "cells": 1,
+     "before_ok": 0,
+     "after_ok": 1,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      13414,
+      4165
+     ]
+    },
+    {
+     "tp": "TP-0269",
+     "first": 53,
+     "end": 57,
+     "cells": 7,
+     "before_ok": 0,
+     "after_ok": 7,
+     "answers": [
+      "after",
+      "both wrong"
+     ],
+     "tokens": [
+      14816,
+      20863
+     ]
+    },
+    {
+     "tp": "TP-0138",
+     "first": 1,
+     "end": 3,
+     "cells": 3,
+     "before_ok": 0,
+     "after_ok": 3,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      6027,
+      8018
+     ]
+    },
+    {
+     "tp": "TP-0087",
+     "first": 2,
+     "end": 2,
+     "cells": 2,
+     "before_ok": 0,
+     "after_ok": 2,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      5222,
+      9062
+     ]
+    }
+   ],
+   "arbiter": true,
+   "score": 0.7307692307692307,
+   "oracle": true
+  },
+  {
+   "source": "live val-cons-fv dc_fsm luna14 commit 4",
+   "run": "luna14",
+   "mod": "or1200_dc_fsm",
+   "dpass": 8,
+   "dcons": -0.00014964459408906006,
+   "golden_net": 73,
+   "golden_net_own": 35,
+   "episodes_total": 19,
+   "cells_total": 35,
+   "asked": [
+    {
+     "tp": "TP-0121",
+     "first": 2,
+     "end": 2,
+     "cells": 1,
+     "before_ok": 0,
+     "after_ok": 1,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      13414,
+      4165
+     ]
+    },
+    {
+     "tp": "TP-0138",
+     "first": 1,
+     "end": 3,
+     "cells": 3,
+     "before_ok": 0,
+     "after_ok": 3,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      6027,
+      8018
+     ]
+    },
+    {
+     "tp": "TP-0279",
+     "first": 13,
+     "end": 15,
+     "cells": 6,
+     "before_ok": 0,
+     "after_ok": 6,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      7380,
+      10471
+     ]
+    },
+    {
+     "tp": "TP-0017",
+     "first": 2,
+     "end": 2,
+     "cells": 1,
+     "before_ok": 0,
+     "after_ok": 1,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      3241,
+      8192
+     ]
+    }
+   ],
+   "arbiter": true,
+   "score": 1.0,
+   "oracle": true
+  },
+  {
+   "source": "live val-cons-fv dc_fsm luna14 commit 6",
+   "run": "luna14",
+   "mod": "or1200_dc_fsm",
+   "dpass": 6,
+   "dcons": 7.482229704451153e-05,
+   "golden_net": 55,
+   "golden_net_own": 23,
+   "episodes_total": 17,
+   "cells_total": 23,
+   "asked": [
+    {
+     "tp": "TP-0011",
+     "first": 2,
+     "end": 2,
+     "cells": 2,
+     "before_ok": 0,
+     "after_ok": 2,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      5232,
+      5380
+     ]
+    },
+    {
+     "tp": "TP-0017",
+     "first": 2,
+     "end": 2,
+     "cells": 1,
+     "before_ok": 0,
+     "after_ok": 1,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      3241,
+      8192
+     ]
+    },
+    {
+     "tp": "TP-0123",
+     "first": 2,
+     "end": 2,
+     "cells": 2,
+     "before_ok": 0,
+     "after_ok": 2,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      7545,
+      4758
+     ]
+    },
+    {
+     "tp": "TP-0087",
+     "first": 2,
+     "end": 2,
+     "cells": 2,
+     "before_ok": 0,
+     "after_ok": 2,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      5222,
+      9062
+     ]
+    }
+   ],
+   "arbiter": true,
+   "score": 1.0,
+   "oracle": true
+  },
+  {
+   "source": "live val-cons-fv dc_fsm luna14 commit 9",
+   "run": "luna14",
+   "mod": "or1200_dc_fsm",
+   "dpass": 8,
+   "dcons": -0.008454919566030691,
+   "golden_net": 272,
+   "golden_net_own": 109,
+   "episodes_total": 28,
+   "cells_total": 109,
+   "asked": [
+    {
+     "tp": "TP-0279",
+     "first": 13,
+     "end": 17,
+     "cells": 7,
+     "before_ok": 0,
+     "after_ok": 7,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      16858,
+      14285
+     ]
+    },
+    {
+     "tp": "TP-0261",
+     "first": 4,
+     "end": 18,
+     "cells": 8,
+     "before_ok": 0,
+     "after_ok": 8,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      7019,
+      8048
+     ]
+    },
+    {
+     "tp": "TP-0213",
+     "first": 6,
+     "end": 20,
+     "cells": 8,
+     "before_ok": 0,
+     "after_ok": 8,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      9334,
+      7544
+     ]
+    },
+    {
+     "tp": "TP-0137",
+     "first": 6,
+     "end": 20,
+     "cells": 8,
+     "before_ok": 0,
+     "after_ok": 8,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      9713,
+      6929
+     ]
+    }
+   ],
+   "arbiter": true,
+   "score": 1.0,
+   "oracle": true
+  },
+  {
+   "source": "live val-cons-fv dc_fsm luna14 commit 10",
+   "run": "luna14",
+   "mod": "or1200_dc_fsm",
+   "dpass": 8,
+   "dcons": -0.00048634493078939894,
+   "golden_net": 66,
+   "golden_net_own": 30,
+   "episodes_total": 19,
+   "cells_total": 30,
+   "asked": [
+    {
+     "tp": "TP-0279",
+     "first": 13,
+     "end": 15,
+     "cells": 3,
+     "before_ok": 0,
+     "after_ok": 3,
+     "answers": [
+      "before",
+      "after"
+     ],
+     "tokens": [
+      14972,
+      6693
+     ]
+    },
+    {
+     "tp": "TP-0123",
+     "first": 2,
+     "end": 2,
+     "cells": 2,
+     "before_ok": 0,
+     "after_ok": 2,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      7545,
+      4758
+     ]
+    },
+    {
+     "tp": "TP-0269",
+     "first": 53,
+     "end": 57,
+     "cells": 4,
+     "before_ok": 0,
+     "after_ok": 4,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      33531,
+      14520
+     ]
+    },
+    {
+     "tp": "TP-0207",
+     "first": 2,
+     "end": 2,
+     "cells": 1,
+     "before_ok": 0,
+     "after_ok": 1,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      2549,
+      6083
+     ]
+    }
+   ],
+   "arbiter": true,
+   "score": 0.7,
+   "oracle": true
+  },
+  {
+   "source": "live val-cons-fv dc_fsm luna14 commit 11",
+   "run": "luna14",
+   "mod": "or1200_dc_fsm",
+   "dpass": 8,
+   "dcons": -0.010250654695099152,
+   "golden_net": 390,
+   "golden_net_own": 151,
+   "episodes_total": 30,
+   "cells_total": 215,
+   "asked": [
+    {
+     "tp": "TP-0279",
+     "first": 13,
+     "end": 17,
+     "cells": 8,
+     "before_ok": 0,
+     "after_ok": 8,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      10980,
+      9793
+     ]
+    },
+    {
+     "tp": "TP-0212",
+     "first": 4,
+     "end": 18,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      8835,
+      14018
+     ]
+    },
+    {
+     "tp": "TP-0003",
+     "first": 5,
+     "end": 19,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      8931,
+      13447
+     ]
+    },
+    {
+     "tp": "TP-0261",
+     "first": 4,
+     "end": 18,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      10194,
+      14011
+     ]
+    }
+   ],
+   "arbiter": true,
+   "score": 1.0,
+   "oracle": true
+  },
+  {
+   "source": "live val-cons-fv dc_fsm luna14 commit 12",
+   "run": "luna14",
+   "mod": "or1200_dc_fsm",
+   "dpass": 2,
+   "dcons": -0.002506546950991432,
+   "golden_net": -35,
+   "golden_net_own": -16,
+   "episodes_total": 21,
+   "cells_total": 64,
+   "asked": [
+    {
+     "tp": "TP-0000",
+     "first": 4,
+     "end": 4,
+     "cells": 1,
+     "before_ok": 0,
+     "after_ok": 1,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      8476,
+      6770
+     ]
+    },
+    {
+     "tp": "TP-0078",
+     "first": 4,
+     "end": 18,
+     "cells": 16,
+     "before_ok": 16,
+     "after_ok": 0,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      8203,
+      7846
+     ]
+    },
+    {
+     "tp": "TP-0267",
+     "first": 3,
+     "end": 3,
+     "cells": 1,
+     "before_ok": 0,
+     "after_ok": 1,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      2486,
+      2263
+     ]
+    },
+    {
+     "tp": "TP-0080",
+     "first": 7,
+     "end": 21,
+     "cells": 16,
+     "before_ok": 16,
+     "after_ok": 0,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      10565,
+      7707
+     ]
+    }
+   ],
+   "arbiter": true,
+   "score": 1.0,
+   "oracle": false
+  },
+  {
+   "source": "live smoket1b-cons-fv dc_fsm luna14 commit 1",
+   "run": "luna14",
+   "mod": "or1200_dc_fsm",
+   "dpass": 7,
+   "dcons": -0.008454919566030691,
+   "golden_net": 467,
+   "golden_net_own": 181,
+   "episodes_total": 28,
+   "cells_total": 183,
+   "asked": [
+    {
+     "tp": "TP-0213",
+     "first": 6,
+     "end": 20,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      9886,
+      9319
+     ]
+    },
+    {
+     "tp": "TP-0003",
+     "first": 5,
+     "end": 19,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      8931,
+      13447
+     ]
+    },
+    {
+     "tp": "TP-0207",
+     "first": 2,
+     "end": 2,
+     "cells": 1,
+     "before_ok": 0,
+     "after_ok": 1,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      2549,
+      6083
+     ]
+    },
+    {
+     "tp": "TP-0264",
+     "first": 4,
+     "end": 18,
+     "cells": 16,
+     "before_ok": 0,
+     "after_ok": 16,
+     "answers": [
+      "after",
+      "after"
+     ],
+     "tokens": [
+      10194,
+      14011
+     ]
+    }
+   ],
+   "arbiter": true,
+   "score": 1.0,
+   "oracle": true
+  }
+ ],
+ "by_module": {
+  "i2c_master_bit_ctrl": [
+   10,
+   10,
+   14
+  ],
+  "i2c_master_byte_ctrl": [
+   21,
+   23,
+   15
+  ],
+  "or1200_dc_fsm": [
+   90,
+   95,
+   1
+  ],
+  "or1200_sb": [
+   11,
+   11,
+   5
+  ]
+ },
+ "arbiter": [
+  15,
+  1,
+  1,
+  5
+ ],
+ "tolerance 0.5": [
+  8,
+  3,
+  8,
+  3
+ ],
+ "tolerance 1": [
+  13,
+  5,
+  3,
+  1
+ ],
+ "perfect judge, same episodes": [
+  15,
+  1,
+  1,
+  5
+ ]
+}

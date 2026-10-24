@@ -1,0 +1,1644 @@
+{
+ "summary": {
+  "trials_used": 1,
+  "check_staged_calls": 3,
+  "rounds": 30,
+  "failing_before": [
+   "REQ-0003",
+   "REQ-0006",
+   "REQ-0009",
+   "REQ-0029",
+   "REQ-0042",
+   "REQ-0062",
+   "REQ-0064",
+   "REQ-0066",
+   "REQ-0070",
+   "REQ-0073",
+   "REQ-0090",
+   "REQ-0095",
+   "REQ-0096",
+   "REQ-0105",
+   "REQ-0110",
+   "REQ-0114",
+   "REQ-0115",
+   "REQ-0116",
+   "REQ-0119"
+  ],
+  "failing_after": [
+   "REQ-0003",
+   "REQ-0006",
+   "REQ-0009",
+   "REQ-0029",
+   "REQ-0042",
+   "REQ-0062",
+   "REQ-0064",
+   "REQ-0066",
+   "REQ-0070",
+   "REQ-0073",
+   "REQ-0090",
+   "REQ-0095",
+   "REQ-0096",
+   "REQ-0105",
+   "REQ-0110",
+   "REQ-0114",
+   "REQ-0115",
+   "REQ-0116",
+   "REQ-0119"
+  ],
+  "uncovered_after": 25,
+  "passing_after": 46
+ },
+ "log": [
+  {
+   "round": 0,
+   "tool": "explain",
+   "args": {
+    "req_uid": "REQ-0090"
+   },
+   "seconds": 0.0,
+   "result": {
+    "is_action_executed": true,
+    "requirement": {
+     "req_uid": "REQ-0090",
+     "requirement": "The module loads the internal counter cnt from the prescale input clk_cnt and decrements cnt on each rising edge of clk.",
+     "when": "after reset is inactive and the core is enabled",
+     "activation_inputs": {
+      "nReset": 1,
+      "rst": 0,
+      "ena": 1
+     },
+     "window_closes_on": [],
+     "then": "The internal counter cnt is loaded from clk_cnt and then decrements by one on each rising edge of clk while the core remains enabled and not in reset.",
+     "observable_at": [
+      "clk_cnt",
+      "ena",
+      "nReset",
+      "rst",
+      "scl_oen"
+     ]
+    },
+    "check_said": "scl_oen changed on consecutive distinct clock rows while clk_cnt=3",
+    "verdict": false,
+    "testpoint": "TP-0212",
+    "span": {
+     "opened_at_edge": 58,
+     "objected_at_edge": 68,
+     "opened_at_t": 620,
+     "objected_at_t": 720,
+     "note": "the interval this requirement governs; a transactional view collapses runs, so an edge is where a state BEGAN"
+    },
+    "boundary_ports": [
+     {
+      "edge": 56,
+      "t": 600,
+      "clk_cnt": 3,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 1
+     },
+     {
+      "edge": 57,
+      "t": 610,
+      "clk_cnt": 3,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 1
+     },
+     {
+      "edge": 58,
+      "t": 620,
+      "clk_cnt": 3,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 1
+     },
+     {
+      "edge": 59,
+      "t": 630,
+      "clk_cnt": 3,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 1
+     },
+     {
+      "edge": 60,
+      "t": 640,
+      "clk_cnt": 3,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 0
+     },
+     {
+      "edge": 61,
+      "t": 650,
+      "clk_cnt": 3,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 0
+     },
+     {
+      "edge": 62,
+      "t": 660,
+      "clk_cnt": 3,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 0
+     },
+     {
+      "edge": 63,
+      "t": 670,
+      "clk_cnt": 3,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 0
+     },
+     {
+      "edge": 64,
+      "t": 680,
+      "clk_cnt": 3,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 0
+     },
+     {
+      "edge": 65,
+      "t": 690,
+      "clk_cnt": 3,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 0
+     },
+     {
+      "edge": 66,
+      "t": 700,
+      "clk_cnt": 3,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 0
+     },
+     {
+      "edge": 67,
+      "t": 710,
+      "clk_cnt": 3,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 0
+     },
+     {
+      "edge": 68,
+      "t": 720,
+      "clk_cnt": 3,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 1
+     },
+     {
+      "edge": 69,
+      "t": 730,
+      "clk_cnt": 3,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 1
+     },
+     {
+      "edge": 70,
+      "t": 740,
+      "clk_cnt": 3,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 1
+     }
+    ],
+    "transitions": [
+     "scl_oen 1 -> 0 at t=640",
+     "scl_oen 0 -> 1 at t=720"
+    ],
+    "suspect_blocks": [
+     "A4",
+     "C3",
+     "C11",
+     "C8",
+     "A2",
+     "C10",
+     "C6"
+    ],
+    "block_internals": {},
+    "what_would_satisfy_it": "NO single-value change at the deciding edge satisfies this check, so the defect is TEMPORAL -- the ordering or the timing, not a wrong value at one edge."
+   }
+  },
+  {
+   "round": 1,
+   "tool": "focus",
+   "args": {
+    "req_uid": "REQ-0090"
+   },
+   "seconds": 0.0,
+   "result": {
+    "is_action_executed": true,
+    "focused": "REQ-0090",
+    "ports": [
+     "clk_cnt",
+     "ena",
+     "nReset",
+     "rst",
+     "scl_oen"
+    ],
+    "suspect_blocks": [
+     {
+      "id": "A4",
+      "kind": "always",
+      "clocking": "seq",
+      "start_line": 168,
+      "end_line": 313,
+      "writes": [
+       "cmd_ack",
+       "scl_oen",
+       "sda_chk",
+       "sda_oen",
+       "state"
+      ]
+     },
+     {
+      "id": "C3",
+      "kind": "assign",
+      "clocking": "comb",
+      "start_line": 76,
+      "end_line": 76,
+      "writes": [
+       "clk_en"
+      ]
+     },
+     {
+      "id": "C11",
+      "kind": "assign",
+      "clocking": "comb",
+      "start_line": 86,
+      "end_line": 87,
+      "writes": [
+       "arbitration_lost"
+      ]
+     },
+     {
+      "id": "C8",
+      "kind": "assign",
+      "clocking": "comb",
+      "start_line": 81,
+      "end_line": 81,
+      "writes": [
+       "sto_condition"
+      ]
+     },
+     {
+      "id": "A2",
+      "kind": "always",
+      "clocking": "seq",
+      "start_line": 132,
+      "end_line": 144,
+      "writes": [
+       "cnt"
+      ]
+     },
+     {
+      "id": "C10",
+      "kind": "assign",
+      "clocking": "comb",
+      "start_line": 83,
+      "end_line": 85,
+      "writes": [
+       "stop_cmd_active"
+      ]
+     },
+     {
+      "id": "C6",
+      "kind": "assign",
+      "clocking": "comb",
+      "start_line": 79,
+      "end_line": 79,
+      "writes": [
+       "sSDA"
+      ]
+     }
+    ],
+    "note": "sliced from this requirement's ports alone; list_suspect_blocks() now shows these"
+   }
+  },
+  {
+   "round": 2,
+   "tool": "read_block",
+   "args": {
+    "block_id": "A2"
+   },
+   "seconds": 0.0,
+   "result": "132: always @(posedge clk or negedge nReset) begin\n133:     if (!nReset) begin\n134:         cnt <= 16'd0;\n135:     end else if (rst) begin\n136:         cnt <= 16'd0;\n137:     end else if (!ena || scl_sync || (cnt == 16'd0)) begin\n138:         cnt <= clk_cnt;\n139:     end else if (slave_wait) begin\n140:         cnt <= cnt;\n141:     end else begin\n142:         cnt <= cnt - 16'd1;\n143:     end\n144: end\n"
+  },
+  {
+   "round": 3,
+   "tool": "explain",
+   "args": {
+    "req_uid": "REQ-0042"
+   },
+   "seconds": 0.0,
+   "result": {
+    "is_action_executed": true,
+    "requirement": {
+     "req_uid": "REQ-0042",
+     "requirement": "The module shall assert scl_sync when a falling edge occurs on the filtered SCL input while scl_oen indicates that the module has released SCL high.",
+     "when": "a falling edge occurs on the filtered SCL while the module has released SCL high",
+     "activation_inputs": {},
+     "window_closes_on": [],
+     "then": "scl_sync is asserted (goes true/high) when a filtered SCL falling edge occurs while scl_oen indicates the module has released SCL.",
+     "observable_at": [
+      "scl_i",
+      "scl_oen"
+     ]
+    },
+    "check_said": "the invariant broke at edge 122, in the window opening at edge 121",
+    "verdict": false,
+    "testpoint": "TP-0098",
+    "span": {
+     "opened_at_edge": 112,
+     "objected_at_edge": 122,
+     "opened_at_t": 1220,
+     "objected_at_t": 1320,
+     "note": "the interval this requirement governs; a transactional view collapses runs, so an edge is where a state BEGAN"
+    },
+    "boundary_ports": [
+     {
+      "edge": 110,
+      "t": 1200,
+      "scl_i": 1,
+      "scl_oen": 1
+     },
+     {
+      "edge": 111,
+      "t": 1210,
+      "scl_i": 1,
+      "scl_oen": 1
+     },
+     {
+      "edge": 112,
+      "t": 1220,
+      "scl_i": 1,
+      "scl_oen": 1
+     },
+     {
+      "edge": 113,
+      "t": 1230,
+      "scl_i": 1,
+      "scl_oen": 1
+     },
+     {
+      "edge": 114,
+      "t": 1240,
+      "scl_i": 1,
+      "scl_oen": 1
+     },
+     {
+      "edge": 115,
+      "t": 1250,
+      "scl_i": 1,
+      "scl_oen": 1
+     },
+     {
+      "edge": 116,
+      "t": 1260,
+      "scl_i": 1,
+      "scl_oen": 1
+     },
+     {
+      "edge": 117,
+      "t": 1270,
+      "scl_i": 1,
+      "scl_oen": 1
+     },
+     {
+      "edge": 118,
+      "t": 1280,
+      "scl_i": 1,
+      "scl_oen": 1
+     },
+     {
+      "edge": 119,
+      "t": 1290,
+      "scl_i": 1,
+      "scl_oen": 1
+     },
+     {
+      "edge": 120,
+      "t": 1300,
+      "scl_i": 1,
+      "scl_oen": 0
+     },
+     {
+      "edge": 121,
+      "t": 1310,
+      "scl_i": 0,
+      "scl_oen": 0
+     },
+     {
+      "edge": 122,
+      "t": 1320,
+      "scl_i": 0,
+      "scl_oen": 1
+     },
+     {
+      "edge": 123,
+      "t": 1330,
+      "scl_i": 0,
+      "scl_oen": 1
+     },
+     {
+      "edge": 124,
+      "t": 1340,
+      "scl_i": 0,
+      "scl_oen": 0
+     }
+    ],
+    "transitions": [
+     "scl_oen 1 -> 0 at t=1300",
+     "scl_i 1 -> 0 at t=1310",
+     "scl_oen 0 -> 1 at t=1320",
+     "scl_oen 1 -> 0 at t=1340"
+    ],
+    "suspect_blocks": [
+     "A4",
+     "C3",
+     "C11",
+     "C8",
+     "A2",
+     "C10",
+     "C6"
+    ],
+    "block_internals": {},
+    "what_would_satisfy_it": "NO single-value change at the deciding edge satisfies this check, so the defect is TEMPORAL -- the ordering or the timing, not a wrong value at one edge."
+   }
+  },
+  {
+   "round": 4,
+   "tool": "focus",
+   "args": {
+    "req_uid": "REQ-0042"
+   },
+   "seconds": 0.0,
+   "result": {
+    "is_action_executed": true,
+    "focused": "REQ-0042",
+    "ports": [
+     "scl_i",
+     "scl_oen"
+    ],
+    "suspect_blocks": [
+     {
+      "id": "A4",
+      "kind": "always",
+      "clocking": "seq",
+      "start_line": 168,
+      "end_line": 313,
+      "writes": [
+       "cmd_ack",
+       "scl_oen",
+       "sda_chk",
+       "sda_oen",
+       "state"
+      ]
+     },
+     {
+      "id": "C3",
+      "kind": "assign",
+      "clocking": "comb",
+      "start_line": 76,
+      "end_line": 76,
+      "writes": [
+       "clk_en"
+      ]
+     },
+     {
+      "id": "C11",
+      "kind": "assign",
+      "clocking": "comb",
+      "start_line": 86,
+      "end_line": 87,
+      "writes": [
+       "arbitration_lost"
+      ]
+     },
+     {
+      "id": "C8",
+      "kind": "assign",
+      "clocking": "comb",
+      "start_line": 81,
+      "end_line": 81,
+      "writes": [
+       "sto_condition"
+      ]
+     },
+     {
+      "id": "A2",
+      "kind": "always",
+      "clocking": "seq",
+      "start_line": 132,
+      "end_line": 144,
+      "writes": [
+       "cnt"
+      ]
+     },
+     {
+      "id": "C10",
+      "kind": "assign",
+      "clocking": "comb",
+      "start_line": 83,
+      "end_line": 85,
+      "writes": [
+       "stop_cmd_active"
+      ]
+     },
+     {
+      "id": "C6",
+      "kind": "assign",
+      "clocking": "comb",
+      "start_line": 79,
+      "end_line": 79,
+      "writes": [
+       "sSDA"
+      ]
+     }
+    ],
+    "note": "sliced from this requirement's ports alone; list_suspect_blocks() now shows these"
+   }
+  },
+  {
+   "round": 5,
+   "tool": "read_block",
+   "args": {
+    "block_id": "A4"
+   },
+   "seconds": 0.0,
+   "result": "168: always @(posedge clk or negedge nReset) begin\n169:     if (!nReset) begin\n170:         state   <= ST_IDLE;\n171:         cmd_ack <= 1'b0;\n172:         scl_oen <= 1'b1;\n173:         sda_oen <= 1'b1;\n174:         sda_chk <= 1'b0;\n175:     end else if (rst) begin\n176:         state   <= ST_IDLE;\n177:         cmd_ack <= 1'b0;\n178:         scl_oen <= 1'b1;\n179:         sda_oen <= 1'b1;\n180:         sda_chk <= 1'b0;\n181:     end else begin\n182:         cmd_ack <= 1'b0;\n183: \n184:         if (arbitration_lost) begin\n185:             state   <= ST_IDLE;\n186:             scl_oen <= 1'b1;\n187:             sda_oen <= 1'b1;\n188:             sda_chk <= 1'b0;\n189:         end else if (clk_en) begin\n190:             case (state)\n191:                 ST_IDLE: begin\n192:                     sda_chk <= 1'b0;\n193:                     case (cmd)\n194:                         CMD_START: begin\n195:                             state   <= ST_START_A;\n196:                             scl_oen <= 1'b1;\n197:                             sda_oen <= 1'b1;\n198:                         end\n199:                         CMD_STOP: begin\n200:                             state   <= ST_STOP_A;\n201:                             scl_oen <= 1'b0;\n202:                             sda_oen <= 1'b0;\n203:                         end\n204:                         CMD_READ: begin\n205:                             state   <= ST_READ_A;\n206:                             scl_oen <= 1'b0;\n207:                             sda_oen <= 1'b1;\n208:                         end\n209:                         CMD_WRITE: begin\n210:                             state   <= ST_WRITE_A;\n211:                             scl_oen <= 1'b0;\n212:                             sda_oen <= din;\n213:                         end\n214:                         default: begin\n215:                             state   <= ST_IDLE;\n216:                             scl_oen <= scl_oen;\n217:                             sda_oen <= sda_oen;\n218:                         end\n219:                     endcase\n220:                 end\n221: \n222:                 ST_START_A: begin\n223:                     state   <= ST_START_B;\n224:                     scl_oen <= 1'b1;\n225:                     sda_oen <= 1'b1;\n226:                 end\n227:                 ST_START_B: begin\n228:                     state   <= ST_START_C;\n229:                     scl_oen <= 1'b1;\n230:                     sda_oen <= 1'b0;\n231:                 end\n232:                 ST_START_C: begin\n233:                     state   <= ST_IDLE;\n234:                     scl_oen <= 1'b0;\n235:                     sda_oen <= 1'b0;\n236:                     cmd_ack <= 1'b1;\n237:                 end\n238: \n239:                 ST_STOP_A: begin\n240:                     state   <= ST_STOP_B;\n241:                     scl_oen <= 1'b0;\n242:                     sda_oen <= 1'b0;\n243:                 end\n244:                 ST_STOP_B: begin\n245:                     state   <= ST_STOP_C;\n246:                     scl_oen <= 1'b1;\n247:                     sda_oen <= 1'b0;\n248:                 end\n249:                 ST_STOP_C: begin\n250:                     state   <= ST_IDLE;\n251:                     scl_oen <= 1'b1;\n252:                     sda_oen <= 1'b1;\n253:                     cmd_ack <= 1'b1;\n254:                 end\n255: \n256:                 ST_READ_A: begin\n257:                     state   <= ST_READ_B;\n258:                     scl_oen <= 1'b0;\n259:                     sda_oen <= 1'b1;\n260:                 end\n261:                 ST_READ_B: begin\n262:                     state   <= ST_READ_C;\n263:                     scl_oen <= 1'b1;\n264:                     sda_oen <= 1'b1;\n265:                 end\n266:                 ST_READ_C: begin\n267:                     state   <= ST_READ_D;\n268:                     scl_oen <= 1'b1;\n269:                     sda_oen <= 1'b1;\n270:                 end\n271:                 ST_READ_D: begin\n272:                     state   <= ST_IDL"
+  },
+  {
+   "round": 6,
+   "tool": "read_block",
+   "args": {
+    "block_id": "C11"
+   },
+   "seconds": 0.0,
+   "result": "86: assign arbitration_lost = (sda_chk & sda_oen & ~sSDA) |\n87:                           ((state != ST_IDLE) & sto_condition & ~stop_cmd_active);\n"
+  },
+  {
+   "round": 7,
+   "tool": "read_block",
+   "args": {
+    "block_id": "C3"
+   },
+   "seconds": 0.0,
+   "result": "76: assign clk_en = (cnt == 16'h0000);\n"
+  },
+  {
+   "round": 8,
+   "tool": "focus",
+   "args": {
+    "req_uid": "REQ-0009"
+   },
+   "seconds": 0.1,
+   "result": {
+    "is_action_executed": true,
+    "focused": "REQ-0009",
+    "ports": [
+     "dout",
+     "nReset",
+     "rst",
+     "sda_i"
+    ],
+    "suspect_blocks": [
+     {
+      "id": "A3",
+      "kind": "always",
+      "clocking": "seq",
+      "start_line": 146,
+      "end_line": 166,
+      "writes": [
+       "al",
+       "busy",
+       "dout"
+      ]
+     },
+     {
+      "id": "C5",
+      "kind": "assign",
+      "clocking": "comb",
+      "start_line": 78,
+      "end_line": 78,
+      "writes": [
+       "sSCL"
+      ]
+     },
+     {
+      "id": "C8",
+      "kind": "assign",
+      "clocking": "comb",
+      "start_line": 81,
+      "end_line": 81,
+      "writes": [
+       "sto_condition"
+      ]
+     },
+     {
+      "id": "C11",
+      "kind": "assign",
+      "clocking": "comb",
+      "start_line": 86,
+      "end_line": 87,
+      "writes": [
+       "arbitration_lost"
+      ]
+     },
+     {
+      "id": "A1",
+      "kind": "always",
+      "clocking": "seq",
+      "start_line": 89,
+      "end_line": 130,
+      "writes": [
+       "cSCL",
+       "cSDA",
+       "dSCL",
+       "dSDA",
+       "dscl_oen",
+       "fSCL",
+       "fSDA",
+       "filter_cnt",
+       "slave_wait"
+      ]
+     },
+     {
+      "id": "C7",
+      "kind": "assign",
+      "clocking": "comb",
+      "start_line": 80,
+      "end_line": 80,
+      "writes": [
+       "sta_condition"
+      ]
+     },
+     {
+      "id": "C6",
+      "kind": "assign",
+      "clocking": "comb",
+      "start_line": 79,
+      "end_line": 79,
+      "writes": [
+       "sSDA"
+      ]
+     },
+     {
+      "id": "A4",
+      "kind": "always",
+      "clocking": "seq",
+      "start_line": 168,
+      "end_line": 313,
+      "writes": [
+       "cmd_ack",
+       "scl_oen",
+       "sda_chk",
+       "sda_oen",
+       "state"
+      ]
+     },
+     {
+      "id": "C4",
+      "kind": "assign",
+      "clocking": "comb",
+      "start_line": 77,
+      "end_line": 77,
+      "writes": [
+       "filter_load"
+      ]
+     },
+     {
+      "id": "C10",
+      "kind": "assign",
+      "clocking": "comb",
+      "start_line": 83,
+      "end_line": 85,
+      "writes": [
+       "stop_cmd_active"
+      ]
+     }
+    ],
+    "note": "sliced from this requirement's ports alone; list_suspect_blocks() now shows these"
+   }
+  },
+  {
+   "round": 9,
+   "tool": "read_block",
+   "args": {
+    "block_id": "A1"
+   },
+   "seconds": 0.0,
+   "result": "89: always @(posedge clk or negedge nReset) begin\n90:     if (!nReset) begin\n91:         cSCL      <= 2'b11;\n92:         cSDA      <= 2'b11;\n93:         fSCL      <= 3'b111;\n94:         fSDA      <= 3'b111;\n95:         dSCL      <= 1'b1;\n96:         dSDA      <= 1'b1;\n97:         dscl_oen  <= 1'b1;\n98:         filter_cnt <= 14'd0;\n99:         slave_wait <= 1'b0;\n100:     end else if (rst) begin\n101:         cSCL      <= 2'b11;\n102:         cSDA      <= 2'b11;\n103:         fSCL      <= 3'b111;\n104:         fSDA      <= 3'b111;\n105:         dSCL      <= 1'b1;\n106:         dSDA      <= 1'b1;\n107:         dscl_oen  <= 1'b1;\n108:         filter_cnt <= 14'd0;\n109:         slave_wait <= 1'b0;\n110:     end else begin\n111:         cSCL <= {cSCL[0], scl_i};\n112:         cSDA <= {cSDA[0], sda_i};\n113:         dSCL <= sSCL;\n114:         dSDA <= sSDA;\n115:         dscl_oen <= scl_oen;\n116: \n117:         if (!ena) begin\n118:             filter_cnt <= filter_load;\n119:         end else if (filter_cnt == 14'd0) begin\n120:             filter_cnt <= filter_load;\n121:             fSCL <= {fSCL[1:0], cSCL[1]};\n122:             fSDA <= {fSDA[1:0], cSDA[1]};\n123:         end else begin\n124:             filter_cnt <= filter_cnt - 14'd1;\n125:         end\n126: \n127:         slave_wait <= ((scl_oen & ~dscl_oen) & ~sSCL) |\n128:                       (slave_wait & ~sSCL);\n129:     end\n130: end\n"
+  },
+  {
+   "round": 10,
+   "tool": "read_block",
+   "args": {
+    "block_id": "A3"
+   },
+   "seconds": 0.0,
+   "result": "146: always @(posedge clk or negedge nReset) begin\n147:     if (!nReset) begin\n148:         busy <= 1'b0;\n149:         al   <= 1'b0;\n150:         dout <= 1'b0;\n151:     end else if (rst) begin\n152:         busy <= 1'b0;\n153:         al   <= 1'b0;\n154:         dout <= 1'b0;\n155:     end else begin\n156:         if (sSCL & ~dSCL)\n157:             dout <= sSDA;\n158: \n159:         if (sta_condition)\n160:             busy <= 1'b1;\n161:         else if (sto_condition)\n162:             busy <= 1'b0;\n163: \n164:         al <= arbitration_lost;\n165:     end\n166: end\n"
+  },
+  {
+   "round": 11,
+   "tool": "read_block",
+   "args": {
+    "block_id": "C9"
+   },
+   "seconds": 0.0,
+   "result": "ERROR: Unknown block_id 'C9'."
+  },
+  {
+   "round": 12,
+   "tool": "read_block",
+   "args": {
+    "block_id": "C1"
+   },
+   "seconds": 0.0,
+   "result": "ERROR: Unknown block_id 'C1'."
+  },
+  {
+   "round": 13,
+   "tool": "read_block",
+   "args": {
+    "block_id": "C5"
+   },
+   "seconds": 0.0,
+   "result": "78: assign sSCL = majority3(fSCL);\n"
+  },
+  {
+   "round": 14,
+   "tool": "read_block",
+   "args": {
+    "block_id": "C4"
+   },
+   "seconds": 0.0,
+   "result": "77: assign filter_load = clk_cnt[15:2];\n"
+  },
+  {
+   "round": 15,
+   "tool": "explain",
+   "args": {
+    "req_uid": "REQ-0114"
+   },
+   "seconds": 0.0,
+   "result": {
+    "is_action_executed": true,
+    "requirement": {
+     "req_uid": "REQ-0114",
+     "requirement": "The FSM drives or releases the SDA line according to the value presented on the din input during a WRITE command.",
+     "when": "the FSM is executing a WRITE command sequence",
+     "activation_inputs": {
+      "cmd": 4,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0
+     },
+     "window_closes_on": [
+      {
+       "cmd_ack": 1
+      },
+      {
+       "al": 1
+      }
+     ],
+     "then": "During the WRITE sequence the DUT drives SDA (sda_oen = 0) when din = 0, and releases SDA (sda_oen = 1) when din = 1.",
+     "observable_at": [
+      "al",
+      "cmd",
+      "cmd_ack",
+      "din",
+      "ena",
+      "nReset",
+      "rst",
+      "scl_i",
+      "sda_oen"
+     ]
+    },
+    "check_said": "the invariant broke at edge 4, in the window opening at edge 1",
+    "verdict": false,
+    "testpoint": "TP-0261",
+    "span": {
+     "opened_at_edge": 0,
+     "objected_at_edge": 4,
+     "opened_at_t": 70,
+     "objected_at_t": 110,
+     "note": "the interval this requirement governs; a transactional view collapses runs, so an edge is where a state BEGAN"
+    },
+    "boundary_ports": [
+     {
+      "edge": 0,
+      "t": 70,
+      "al": 0,
+      "cmd": 0,
+      "cmd_ack": 0,
+      "din": 1,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_i": 1,
+      "sda_oen": 1
+     },
+     {
+      "edge": 1,
+      "t": 80,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "din": 0,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_i": 1,
+      "sda_oen": 0
+     },
+     {
+      "edge": 2,
+      "t": 90,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "din": 0,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_i": 1,
+      "sda_oen": 0
+     },
+     {
+      "edge": 3,
+      "t": 100,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "din": 0,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_i": 1,
+      "sda_oen": 0
+     },
+     {
+      "edge": 4,
+      "t": 110,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 1,
+      "din": 0,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_i": 1,
+      "sda_oen": 1
+     },
+     {
+      "edge": 5,
+      "t": 120,
+      "al": 0,
+      "cmd": 0,
+      "cmd_ack": 0,
+      "din": 1,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_i": 1,
+      "sda_oen": 1
+     },
+     {
+      "edge": 6,
+      "t": 130,
+      "al": 0,
+      "cmd": 0,
+      "cmd_ack": 0,
+      "din": 1,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_i": 1,
+      "sda_oen": 1
+     }
+    ],
+    "transitions": [
+     "cmd 0 -> 4 at t=80",
+     "din 1 -> 0 at t=80",
+     "sda_oen 1 -> 0 at t=80",
+     "cmd_ack 0 -> 1 at t=110",
+     "sda_oen 0 -> 1 at t=110",
+     "cmd 4 -> 0 at t=120",
+     "cmd_ack 1 -> 0 at t=120",
+     "din 0 -> 1 at t=120"
+    ],
+    "suspect_blocks": [
+     "A3",
+     "A4",
+     "C3",
+     "C7",
+     "C11",
+     "C8",
+     "C5",
+     "A1",
+     "C6",
+     "A2",
+     "C4",
+     "C10"
+    ],
+    "block_internals": {},
+    "what_would_satisfy_it": "NO single-value change at the deciding edge satisfies this check, so the defect is TEMPORAL -- the ordering or the timing, not a wrong value at one edge."
+   }
+  },
+  {
+   "round": 16,
+   "tool": "explain",
+   "args": {
+    "req_uid": "REQ-0066"
+   },
+   "seconds": 0.0,
+   "result": {
+    "is_action_executed": true,
+    "requirement": {
+     "req_uid": "REQ-0066",
+     "requirement": "The READ command sequence releases the SDA line so that the external slave can drive the data bit.",
+     "when": "during the READ data-bit phase",
+     "activation_inputs": {
+      "cmd": 4,
+      "ena": 1
+     },
+     "window_closes_on": [
+      {
+       "scl_oen": 0
+      },
+      {
+       "cmd_ack": 1
+      },
+      {
+       "al": 1
+      }
+     ],
+     "then": "sda_oen is released (sda_oen = 1) during the READ data-bit so the external slave can drive SDA",
+     "observable_at": [
+      "al",
+      "cmd",
+      "cmd_ack",
+      "ena",
+      "scl_oen",
+      "sda_oen"
+     ]
+    },
+    "check_said": "the invariant broke at edge 70, in the window opening at edge 60",
+    "verdict": false,
+    "testpoint": "TP-0159",
+    "span": {
+     "opened_at_edge": 60,
+     "objected_at_edge": 70,
+     "opened_at_t": 640,
+     "objected_at_t": 740,
+     "note": "the interval this requirement governs; a transactional view collapses runs, so an edge is where a state BEGAN"
+    },
+    "boundary_ports": [
+     {
+      "edge": 58,
+      "t": 620,
+      "al": 0,
+      "cmd": 0,
+      "cmd_ack": 0,
+      "ena": 1,
+      "scl_oen": 1,
+      "sda_oen": 1
+     },
+     {
+      "edge": 59,
+      "t": 630,
+      "al": 0,
+      "cmd": 0,
+      "cmd_ack": 0,
+      "ena": 1,
+      "scl_oen": 1,
+      "sda_oen": 1
+     },
+     {
+      "edge": 60,
+      "t": 640,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "ena": 1,
+      "scl_oen": 0,
+      "sda_oen": 0
+     },
+     {
+      "edge": 61,
+      "t": 650,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "ena": 1,
+      "scl_oen": 0,
+      "sda_oen": 0
+     },
+     {
+      "edge": 62,
+      "t": 660,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "ena": 1,
+      "scl_oen": 0,
+      "sda_oen": 0
+     },
+     {
+      "edge": 63,
+      "t": 670,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "ena": 1,
+      "scl_oen": 0,
+      "sda_oen": 0
+     },
+     {
+      "edge": 64,
+      "t": 680,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "ena": 1,
+      "scl_oen": 0,
+      "sda_oen": 0
+     },
+     {
+      "edge": 65,
+      "t": 690,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "ena": 1,
+      "scl_oen": 0,
+      "sda_oen": 0
+     },
+     {
+      "edge": 66,
+      "t": 700,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "ena": 1,
+      "scl_oen": 0,
+      "sda_oen": 0
+     },
+     {
+      "edge": 67,
+      "t": 710,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "ena": 1,
+      "scl_oen": 0,
+      "sda_oen": 0
+     },
+     {
+      "edge": 68,
+      "t": 720,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "ena": 1,
+      "scl_oen": 0,
+      "sda_oen": 0
+     },
+     {
+      "edge": 69,
+      "t": 730,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "ena": 1,
+      "scl_oen": 0,
+      "sda_oen": 0
+     },
+     {
+      "edge": 70,
+      "t": 740,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "ena": 1,
+      "scl_oen": 1,
+      "sda_oen": 0
+     },
+     {
+      "edge": 71,
+      "t": 750,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "ena": 1,
+      "scl_oen": 1,
+      "sda_oen": 0
+     },
+     {
+      "edge": 72,
+      "t": 760,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "ena": 1,
+      "scl_oen": 1,
+      "sda_oen": 0
+     }
+    ],
+    "transitions": [
+     "cmd 0 -> 4 at t=640",
+     "scl_oen 1 -> 0 at t=640",
+     "sda_oen 1 -> 0 at t=640",
+     "scl_oen 0 -> 1 at t=740"
+    ],
+    "suspect_blocks": [
+     "A4",
+     "A3",
+     "C3",
+     "C7",
+     "C11",
+     "C8",
+     "C5",
+     "A1",
+     "C6",
+     "A2",
+     "C4",
+     "C10"
+    ],
+    "block_internals": {},
+    "what_would_satisfy_it": "NO single-value change at the deciding edge satisfies this check, so the defect is TEMPORAL -- the ordering or the timing, not a wrong value at one edge."
+   }
+  },
+  {
+   "round": 17,
+   "tool": "explain",
+   "args": {
+    "req_uid": "REQ-0070"
+   },
+   "seconds": 0.0,
+   "result": {
+    "is_action_executed": true,
+    "requirement": {
+     "req_uid": "REQ-0070",
+     "requirement": "When the WRITE sequence needs to drive SDA low the controller must assert sda_oen low when the input din equals 0.",
+     "when": "during the WRITE bit-phase when the transmitted bit is 0",
+     "activation_inputs": {
+      "cmd": 4,
+      "din": 0,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0
+     },
+     "window_closes_on": [
+      {
+       "scl_oen": "fall"
+      },
+      {
+       "al": 1
+      },
+      {
+       "cmd_ack": 1
+      }
+     ],
+     "then": "sda_oen is asserted low (0) while the WRITE bit-phase requires driving SDA low (i.e. whenever din == 0 during that WRITE bit-phase)",
+     "observable_at": [
+      "al",
+      "cmd",
+      "cmd_ack",
+      "din",
+      "ena",
+      "nReset",
+      "rst",
+      "scl_oen",
+      "sda_oen"
+     ]
+    },
+    "check_said": "the invariant broke at edge 69, in the window opening at edge 60",
+    "verdict": false,
+    "testpoint": "TP-0166",
+    "span": {
+     "opened_at_edge": 59,
+     "objected_at_edge": 69,
+     "opened_at_t": 670,
+     "objected_at_t": 770,
+     "note": "the interval this requirement governs; a transactional view collapses runs, so an edge is where a state BEGAN"
+    },
+    "boundary_ports": [
+     {
+      "edge": 57,
+      "t": 650,
+      "al": 0,
+      "cmd": 0,
+      "cmd_ack": 0,
+      "din": 0,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 1,
+      "sda_oen": 1
+     },
+     {
+      "edge": 58,
+      "t": 660,
+      "al": 0,
+      "cmd": 0,
+      "cmd_ack": 0,
+      "din": 0,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 1,
+      "sda_oen": 1
+     },
+     {
+      "edge": 59,
+      "t": 670,
+      "al": 0,
+      "cmd": 0,
+      "cmd_ack": 0,
+      "din": 0,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 1,
+      "sda_oen": 1
+     },
+     {
+      "edge": 60,
+      "t": 680,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "din": 0,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 0,
+      "sda_oen": 0
+     },
+     {
+      "edge": 61,
+      "t": 690,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "din": 0,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 0,
+      "sda_oen": 0
+     },
+     {
+      "edge": 62,
+      "t": 700,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "din": 0,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 0,
+      "sda_oen": 0
+     },
+     {
+      "edge": 63,
+      "t": 710,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "din": 0,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 0,
+      "sda_oen": 0
+     },
+     {
+      "edge": 64,
+      "t": 720,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "din": 0,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 0,
+      "sda_oen": 0
+     },
+     {
+      "edge": 65,
+      "t": 730,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "din": 0,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 0,
+      "sda_oen": 0
+     },
+     {
+      "edge": 66,
+      "t": 740,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "din": 0,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 1,
+      "sda_oen": 0
+     },
+     {
+      "edge": 67,
+      "t": 750,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "din": 0,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 1,
+      "sda_oen": 0
+     },
+     {
+      "edge": 68,
+      "t": 760,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 0,
+      "din": 0,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 1,
+      "sda_oen": 0
+     },
+     {
+      "edge": 69,
+      "t": 770,
+      "al": 0,
+      "cmd": 4,
+      "cmd_ack": 1,
+      "din": 0,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 1,
+      "sda_oen": 1
+     },
+     {
+      "edge": 70,
+      "t": 780,
+      "al": 0,
+      "cmd": 0,
+      "cmd_ack": 0,
+      "din": 1,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 1,
+      "sda_oen": 1
+     },
+     {
+      "edge": 71,
+      "t": 790,
+      "al": 0,
+      "cmd": 0,
+      "cmd_ack": 0,
+      "din": 1,
+      "ena": 1,
+      "nReset": 1,
+      "rst": 0,
+      "scl_oen": 1,
+      "sda_oen": 1
+     }
+    ],
+    "transitions": [
+     "cmd 0 -> 4 at t=680",
+     "scl_oen 1 -> 0 at t=680",
+     "sda_oen 1 -> 0 at t=680",
+     "scl_oen 0 -> 1 at t=740",
+     "cmd_ack 0 -> 1 at t=770",
+     "sda_oen 0 -> 1 at t=770",
+     "cmd 4 -> 0 at t=780",
+     "cmd_ack 1 -> 0 at t=780",
+     "din 0 -> 1 at t=780"
+    ],
+    "suspect_blocks": [
+     "A4",
+     "A3",
+     "C3",
+     "C7",
+     "C11",
+     "C8",
+     "C5",
+     "A1",
+     "C6",
+     "A2",
+     "C4",
+     "C10"
+    ],
+    "block_internals": {},
+    "what_would_satisfy_it": "NO single-value change at the deciding edge satisfies this check, so the defect is TEMPORAL -- the ordering or the timing, not a wrong value at one edge."
+   }
+  },
+  {
+   "round": 18,
+   "tool": "replace_block",
+   "args": {
+    "block_id": "A4",
+    "new_code": "always @(posedge clk or negedge nReset) begin\n    if (!nReset) begin\n        state   <= ST_IDLE;\n        cmd_ack <= 1'b0;\n        scl_oen <= 1'b1;\n        sda_oen <= 1'b1;\n        sda_chk <= 1'b0;\n   "
+   },
+   "seconds": 0.0,
+   "result": {
+    "is_action_executed": true,
+    "warnings": [
+     "scl_oen, sda_chk, sda_oen, state are still read but have LOST their last driver"
+    ]
+   }
+  },
+  {
+   "round": 19,
+   "tool": "check_staged",
+   "args": {},
+   "seconds": 0.2,
+   "result": {
+    "is_syntax_correct": true,
+    "syntax_output": "{\n    \"stdout\": \"- V e r i l a t i o n   R e p o r t: Verilator 5.038 2025-07-08 rev v5.038\\n- Verilator: Built from 0.035 MB sources in 2 modules, into 0.036 MB in 5 C++ files needing 0.000 MB\\n- Verilator: Walltime 0.014 s (elab=0.001, cvt=0.008, bld=0.000); cpu 0.014 s on 1 threads; alloced 10.586 MB\\n\",\n    \"stderr\": \"%Warning-DECLFILENAME: /tmp/claude-0/-home-user-Veri-Sure/12bb865e-7a51-5506-b55a-e5ac7cf72a4a/scratchpad/asrt/loop_t1_60/staged.sv:1:8: Filename 'staged' does not match MODULE name: 'i2c_master_bit_ctrl'\\n    1 | module i2c_master_bit_ctrl (\\n      |        ^~~~~~~~~~~~~~~~~~~\\n                       ... For warning description see https://verilator.org/warn/DECLFILENAME?v=5.038\\n                       ... Use \\\"/* verilator lint_off DECLFILENAME */\\\" and lint_on around source to disable this message.\\n\"\n}",
+    "warnings": [
+     "scl_oen, sda_chk, sda_oen, state are still read but have LOST their last driver"
+    ],
+    "multidriven": [],
+    "staged": true,
+    "check_calls": 1
+   }
+  },
+  {
+   "round": 20,
+   "tool": "commit",
+   "args": {},
+   "seconds": 0.3,
+   "result": {
+    "is_action_executed": false,
+    "is_syntax_correct": true,
+    "syntax_output": "{\n    \"stdout\": \"- V e r i l a t i o n   R e p o r t: Verilator 5.038 2025-07-08 rev v5.038\\n- Verilator: Built from 0.035 MB sources in 2 modules, into 0.036 MB in 5 C++ files needing 0.000 MB\\n- Verilator: Walltime 0.013 s (elab=0.001, cvt=0.007, bld=0.000); cpu 0.013 s on 1 threads; alloced 10.590 MB\\n\",\n    \"stderr\": \"%Warning-DECLFILENAME: /tmp/claude-0/-home-user-Veri-Sure/12bb865e-7a51-5506-b55a-e5ac7cf72a4a/scratchpad/asrt/loop_t1_60/staged.sv:1:8: Filename 'staged' does not match MODULE name: 'i2c_master_bit_ctrl'\\n    1 | module i2c_master_bit_ctrl (\\n      |        ^~~~~~~~~~~~~~~~~~~\\n                       ... For warning description see https://verilator.org/warn/DECLFILENAME?v=5.038\\n                       ... Use \\\"/* verilator lint_off DECLFILENAME */\\\" and lint_on around source to disable this message.\\n\"\n}",
+    "is_sim_pass": false,
+    "sim_mismatch_cnt": 0,
+    "sim_output": "",
+    "error_msg": "Commit rejected: scl_oen, sda_chk, sda_oen, state are still read but the batch removed their LAST driver. Verilator runs -Wno-fatal, so this would not have failed the build -- the signal would go X, every check reading it would abstain, and coverage would fall with nothing naming the cause. Add the replacement driver to this batch, or restore the block you removed.",
+    "warnings": [
+     "scl_oen, sda_chk, sda_oen, state are still read but have LOST their last driver"
+    ],
+    "action_calls": 1,
+    "trials_left": 2,
+    "staged_kept": true,
+    "check_calls": 1
+   }
+  },
+  {
+   "round": 21,
+   "tool": "read_block",
+   "args": {
+    "block_id": "A4"
+   },
+   "seconds": 0.0,
+   "result": "168: always @(posedge clk or negedge nReset) begin\n169:     if (!nReset) begin\n170:         state   <= ST_IDLE;\n171:         cmd_ack <= 1'b0;\n172:         scl_oen <= 1'b1;\n173:         sda_oen <= 1'b1;\n174:         sda_chk <= 1'b0;\n175:     end else if (rst) begin\n176:         state   <= ST_IDLE;\n177:         cmd_ack <= 1'b0;\n178:         scl_oen <= 1'b1;\n179:         sda_oen <= 1'b1;\n180:         sda_chk <= 1'b0;\n181:     end else begin\n182:         cmd_ack <= 1'b0;\n183: \n184:         if (arbitration_lost) begin\n185:             state   <= ST_IDLE;\n186:             scl_oen <= 1'b1;\n187:             sda_oen <= 1'b1;\n188:             sda_chk <= 1'b0;\n189:         end else if (clk_en) begin\n190:             case (state)\n191:                 ST_IDLE: begin\n192:                     sda_chk <= 1'b0;\n193:                     case (cmd)\n194:                         CMD_START: begin\n195:                             state   <= ST_START_A;\n196:                             scl_oen <= 1'b1;\n197:                             sda_oen <= 1'b1;\n198:                         end\n199:                         CMD_READ: begin\n200:                             state   <= ST_READ_A;\n201:                             scl_oen <= 1'b0;\n202:                             sda_oen <= 1'b1;\n203:                         end\n204:                         CMD_WRITE: begin\n205:                             state   <= ST_WRITE_A;\n206:                             scl_oen <= 1'b0;\n207:                             sda_oen <= din;\n208:                         end\n209:                         CMD_STOP: begin\n210:                             state   <= ST_STOP_A;\n211:                             scl_oen <= 1'b0;\n212:                             sda_oen <= 1'b0;\n213:                         end\n214:                         default: begin\n215:                             state   <= ST_IDLE;\n216:                             scl_oen <= scl_oen;\n217:                             sda_oen <= sda_oen;\n218:                         end\n219:                     endcase\n220:                 end\n221: \n222:                 ST_START_A: begin\n223:                     state   <= ST_START_B;\n224:                     scl_oen <= 1'b1;\n225:                     sda_oen <= 1'b1;\n226:                 end\n227:                 ST_START_B: begin\n228:                     state   <= ST_START_C;\n229:                     scl_oen <= 1'b1;\n230:                     sda_oen <= 1'b0;\n231:                 end\n232:                 ST_START_C: begin\n233:                     state   <= ST_IDLE;\n234:                     scl_oen <= 1'b0;\n235:                     sda_oen <= 1'b0;\n236:                     cmd_ack <= 1'b1;\n237:                 end\n238: \n239:                 ST_STOP_A: begin\n240:                     state   <= ST_STOP_B;\n241:                     scl_oen <= 1'b0;\n242:                     sda_oen <= 1'b0;\n243:                 end\n244:                 ST_STOP_B: begin\n245:                     state   <= ST_STOP_C;\n246:                     scl_oen <= 1'b1;\n247:                     sda_oen <= 1'b0;\n248:                 end\n249:                 ST_STOP_C: begin\n250:                     state   <= ST_IDLE;\n251:                     scl_oen <= 1'b1;\n252:                     sda_oen <= 1'b1;\n253:                     cmd_ack <= 1'b1;\n254:                 end\n255: \n256:                 ST_READ_A: begin\n257:                     state   <= ST_READ_B;\n258:                     scl_oen <= 1'b0;\n259:                     sda_oen <= 1'b1;\n260:                 end\n261:                 ST_READ_B: begin\n262:                     state   <= ST_READ_C;\n263:                     scl_oen <= 1'b1;\n264:                     sda_oen <= 1'b1;\n265:                 end\n266:                 ST_READ_C: begin\n267:                     state   <= ST_READ_D;\n268:                     scl_oen <= 1'b1;\n269:                     sda_oen <= 1'b1;\n270:                 end\n271:                 ST_READ_D: begin\n272:                     state   <= ST_IDL"
+  },
+  {
+   "round": 22,
+   "tool": "replace_block",
+   "args": {
+    "block_id": "A4",
+    "new_code": "always @(posedge clk or negedge nReset) begin\n    if (!nReset) begin\n        state   <= ST_IDLE;\n        cmd_ack <= 1'b0;\n        scl_oen <= 1'b1;\n        sda_oen <= 1'b1;\n        sda_chk <= 1'b0;\n   "
+   },
+   "seconds": 0.0,
+   "result": {
+    "is_action_executed": true,
+    "warnings": [
+     "scl_oen, sda_chk, sda_oen, state are still read but have LOST their last driver"
+    ]
+   }
+  },
+  {
+   "round": 23,
+   "tool": "check_staged",
+   "args": {},
+   "seconds": 0.2,
+   "result": {
+    "is_syntax_correct": true,
+    "syntax_output": "{\n    \"stdout\": \"- V e r i l a t i o n   R e p o r t: Verilator 5.038 2025-07-08 rev v5.038\\n- Verilator: Built from 0.034 MB sources in 2 modules, into 0.033 MB in 5 C++ files needing 0.000 MB\\n- Verilator: Walltime 0.013 s (elab=0.001, cvt=0.007, bld=0.000); cpu 0.013 s on 1 threads; alloced 10.469 MB\\n\",\n    \"stderr\": \"%Warning-DECLFILENAME: /tmp/claude-0/-home-user-Veri-Sure/12bb865e-7a51-5506-b55a-e5ac7cf72a4a/scratchpad/asrt/loop_t1_60/staged.sv:1:8: Filename 'staged' does not match MODULE name: 'i2c_master_bit_ctrl'\\n    1 | module i2c_master_bit_ctrl (\\n      |        ^~~~~~~~~~~~~~~~~~~\\n                       ... For warning description see https://verilator.org/warn/DECLFILENAME?v=5.038\\n                       ... Use \\\"/* verilator lint_off DECLFILENAME */\\\" and lint_on around source to disable this message.\\n\"\n}",
+    "warnings": [
+     "scl_oen, sda_chk, sda_oen, state are still read but have LOST their last driver"
+    ],
+    "multidriven": [],
+    "staged": true,
+    "check_calls": 2
+   }
+  },
+  {
+   "round": 24,
+   "tool": "discard_staged",
+   "args": {},
+   "seconds": 0.0,
+   "result": {
+    "is_action_executed": true
+   }
+  },
+  {
+   "round": 25,
+   "tool": "check_staged",
+   "args": {},
+   "seconds": 0.2,
+   "result": {
+    "is_syntax_correct": true,
+    "syntax_output": "{\n    \"stdout\": \"- V e r i l a t i o n   R e p o r t: Verilator 5.038 2025-07-08 rev v5.038\\n- Verilator: Built from 0.035 MB sources in 2 modules, into 0.036 MB in 5 C++ files needing 0.000 MB\\n- Verilator: Walltime 0.014 s (elab=0.001, cvt=0.007, bld=0.000); cpu 0.014 s on 1 threads; alloced 10.594 MB\\n\",\n    \"stderr\": \"%Warning-DECLFILENAME: /tmp/claude-0/-home-user-Veri-Sure/12bb865e-7a51-5506-b55a-e5ac7cf72a4a/scratchpad/asrt/loop_t1_60/staged.sv:1:8: Filename 'staged' does not match MODULE name: 'i2c_master_bit_ctrl'\\n    1 | module i2c_master_bit_ctrl (\\n      |        ^~~~~~~~~~~~~~~~~~~\\n                       ... For warning description see https://verilator.org/warn/DECLFILENAME?v=5.038\\n                       ... Use \\\"/* verilator lint_off DECLFILENAME */\\\" and lint_on around source to disable this message.\\n\"\n}",
+    "warnings": [],
+    "multidriven": [],
+    "staged": false,
+    "check_calls": 3
+   }
+  },
+  {
+   "round": 26,
+   "tool": "replace_block",
+   "args": {
+    "block_id": "A4",
+    "new_code": "always @(posedge clk or negedge nReset) begin\n    if (!nReset) begin\n        state   <= ST_IDLE;\n        cmd_ack <= 1'b0;\n        scl_oen <= 1'b1;\n        sda_oen <= 1'b1;\n        sda_chk <= 1'b0;\n   "
+   },
+   "seconds": 0.0,
+   "result": {
+    "is_action_executed": true,
+    "warnings": [
+     "scl_oen, sda_chk, sda_oen, state are still read but have LOST their last driver"
+    ]
+   }
+  },
+  {
+   "round": 27,
+   "tool": "replace_block",
+   "args": {
+    "block_id": "A4",
+    "new_code": "always @(posedge clk or negedge nReset) begin\n    if (!nReset) begin\n        state   <= ST_IDLE;\n        cmd_ack <= 1'b0;\n        scl_oen <= 1'b1;\n        sda_oen <= 1'b1;\n        sda_chk <= 1'b0;\n   "
+   },
+   "seconds": 0.0,
+   "result": {
+    "is_action_executed": true,
+    "warnings": [
+     "scl_oen, sda_chk, sda_oen, state are still read but have LOST their last driver"
+    ]
+   }
+  },
+  {
+   "round": 28,
+   "tool": "discard_staged",
+   "args": {},
+   "seconds": 0.0,
+   "result": {
+    "is_action_executed": true
+   }
+  },
+  {
+   "round": 29,
+   "tool": "replace_block",
+   "args": {
+    "block_id": "C3",
+    "new_code": "assign clk_en = (cnt == 16'h0000);"
+   },
+   "seconds": 0.0,
+   "result": {
+    "is_action_executed": false,
+    "error_msg": "Unknown block_id 'C3'. Use list_suspect_blocks() first."
+   }
+  }
+ ]
+}
