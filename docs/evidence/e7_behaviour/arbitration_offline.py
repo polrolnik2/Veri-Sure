@@ -40,6 +40,14 @@ and the reset sequence is described from the module's own testbench where it is 
 over zeroed inputs (the I2C benches also hold nReset low and SCL/SDA high).
 Every other prompt is byte-identical to variant 2's, so its cached answer is reused.
 
+VARIANT 4 (ARB_VARIANT=4) is variant 3 plus the child's ports. byte_ctrl's bus pins come
+straight from the benchmark's own reference bit controller, identical in both candidates, so
+they differ only because the byte FSM feeds it a different cmd / din (byte_child_drive.py). The
+excerpt adds a column per child port wired to an internal net, probed in each candidate's own
+simulation (what this module drives into the child, and what the child sends back), and says the
+child is the given reference: the judge checks this module's decisions, not the child's timing.
+ARB_ONLY=<module> restricts a run to one module (and writes no JSON).
+
 Judge prompts and replies stay in EQ/arbitration (private); the repo gets counts and verdicts.
 ARB_DRY=1 lists targets and episodes without calling; ARB_LIMIT=N stops after N new calls.
 -> docs/evidence/e7/ARBITRATION-OFFLINE.json, tables on stdout.
@@ -151,7 +159,7 @@ makes it combinational; (3) compute the value the specification requires on each
 (4) compare with X and Y. If the specification does not determine the marked outputs, answer \
 "undetermined"; if neither candidate matches it, answer "both wrong". End your reply with one JSON \
 object: {"verdict": "X" | "Y" | "both wrong" | "undetermined", "reason": "<one sentence>"}"""
-if VARIANT in ("2", "3"):
+if VARIANT in ("2", "3", "4"):
     SYSTEM = SYSTEM2
 
 
@@ -161,7 +169,7 @@ def spec_of(mod):
 
 def children(mod):
     """The modules this one instantiates (the benchmark's own submodule list), for variant 3."""
-    if VARIANT != "3":
+    if VARIANT not in ("3", "4"):
         return []
     return FA["submodules"](next(p.parent for p in DES.rglob("description.txt") if p.parent.name == mod), mod)
 
@@ -194,7 +202,7 @@ def reset_note(mod):
     post_ = post_.split("end\n", 2)[1]
     hold = dict(re.findall(r"i_(\w+) = (\w+);", pre_))
     rel = dict(re.findall(r"i_(\w+) = (\w+);", post_))
-    if VARIANT != "3" or ({k: v for k, v in hold.items() if v != "0"} == {"rst": "1"} and rel == {"rst": "0"}):
+    if VARIANT not in ("3", "4") or ({k: v for k, v in hold.items() if v != "0"} == {"rst": "1"} and rel == {"rst": "0"}):
         return None
     held = ", ".join(f"{k}={v}" for k, v in hold.items() if v != "0")
     return (f"- Each testpoint starts with a reset sequence that is not shown: for two clock cycles "
@@ -203,11 +211,70 @@ def reset_note(mod):
             f"starts from that reset.")
 
 
+def child_ports(rtl, mod):
+    """Variant 4: each child port wired to one of this module's internal nets -> (port, net, width, dir)."""
+    if VARIANT != "4":
+        return []
+    stim = json.loads((EQ / "stim" / "luna12" / f"{mod}.json").read_text())
+    top = set(stim["inputs"]) | set(stim["outputs"])
+    text = re.sub(r"//[^\n]*", "", re.sub(r"/\*.*?\*/", "", rtl, flags=re.S))
+    out = []
+    for k in children(mod):
+        ref = FA["child_sources"]([k])[0].read_text()
+        decl = {n: (d, int(h) - int(lo) + 1 if h else 1) for d, h, lo, n in
+                re.findall(r"^\s*(input|output)\s+(?:reg|wire)?\s*(?:\[\s*(\d+)\s*:\s*(\d+)\s*\])?\s*(\w+)", ref, re.M)}
+        m = re.search(rf"\b{k}\b\s*(?:#\s*\(.*?\)\s*)?\w+\s*\((.*?)\);", text, re.S)
+        for port, net in re.findall(r"\.(\w+)\s*\(\s*(\w+)\s*\)", m.group(1)) if m else []:
+            if net not in top and port in decl:
+                out.append((port, net, decl[port][1], decl[port][0]))
+    return sorted(out, key=lambda t: t[3])  # what this module drives in, then what the child returns
+
+
+def child_trace(rtl, mod, run):
+    """Variant 4: the child ports' values per row, from the candidate's own simulation (cached)."""
+    cp = child_ports(rtl, mod)
+    if not cp:
+        return None
+    d = EQ / "arbitration" / "child"
+    d.mkdir(parents=True, exist_ok=True)
+    h = hashlib.sha256((rtl + run).encode()).hexdigest()[:16]
+    if (d / f"{h}.json").is_file():
+        return json.loads((d / f"{h}.json").read_text())
+    task = next(p.parent for p in DES.rglob("description.txt") if p.parent.name == mod)
+    tb = (EQ / "work" / mod / "tb.v").read_text()
+    # through the byte controller's own nets: iverilog asserts on a reference into the linked child
+    wires = "".join(f"  wire [{w - 1}:0] p_{port} = dut.{net};\n" for port, net, w, _ in cp)
+    tb = tb.replace("  integer fi,", wires + "  integer fi,", 1)
+    fmt = " ".join("%h" for _ in cp)
+    tb = tb.replace('$fwrite(fo, "%h', f'$fwrite(fo, "{fmt} | ", {", ".join("p_" + c[0] for c in cp)});\n'
+                    f'        $fwrite(fo, "%h', 1)
+    (d / f"{h}.tb.v").write_text(tb)
+    (d / f"{h}.sv").write_text(rtl)
+    kids = [str(k) for k in FA["child_sources"](children(mod))]
+    __import__("subprocess").run(["iverilog", "-g2012", "-s", "tb", "-o", str(d / f"{h}.vvp"), f"-I{task}",
+                                  f"-I{task.parent}", str(d / f"{h}.tb.v"), str(d / f"{h}.sv"), *kids], check=True,
+                                 capture_output=True)
+    tps = sorted(json.loads((EQ / "stim" / run / f"{mod}.json").read_text())["tps"])
+    o = d / f"{h}.out"
+    __import__("subprocess").run(["vvp", "-n", str(d / f"{h}.vvp"), f"+in={EQ / 'stimtxt' / run / f'{mod}.txt'}",
+                                  f"+out={o}"], check=True, capture_output=True, timeout=3600)
+    per, cur = {tp: [] for tp in tps}, -1
+    for line in o.read_text().splitlines():
+        if line == "#":
+            cur += 1
+        else:
+            per[tps[cur]].append(line.split(" | ")[0].split())
+    o.unlink()
+    res = {"ports": [list(c) for c in cp], "rows": per}
+    (d / f"{h}.json").write_text(json.dumps(res))
+    return res
+
+
 def hexw(v, w):
     return format(int(v), "x").zfill(max(1, -(-w // 4)))
 
 
-def prompt(mod, run, ep, A, B, swap):
+def prompt(mod, run, ep, A, B, swap, child=None):
     stim = json.loads((EQ / "stim" / run / f"{mod}.json").read_text())
     spec = spec_of(mod) + "".join(f"\n\n## Specification of the child module {k}, which this module "
                                   f"instantiates\n\n{spec_of(k)}" for k in children(mod))
@@ -217,30 +284,54 @@ def prompt(mod, run, ep, A, B, swap):
     outs, W = stim["outputs"], stim["width"]
     x, y = (A[run][ep["tp"]], B[run][ep["tp"]]) if swap else (B[run][ep["tp"]], A[run][ep["tp"]])
     long_ = ep["first"] > 40
-    lo = 0 if not long_ or VARIANT == "3" else ep["first"] - CONTEXT
-    fold = VARIANT == "3" and long_  # collapse repeated rows, all but the 8 before the divergence
+    lo = 0 if not long_ or VARIANT in ("3", "4") else ep["first"] - CONTEXT
+    fold = VARIANT in ("3", "4") and long_  # collapse repeated rows, all but the 8 before the divergence
+    # variant 4: the child's ports, X and Y as the outputs are (child = (before, after) traces)
+    cx, cy = ([], [])
+    cports = []
+    if child and child[0] and child[1]:
+        ca, cb = child[0]["rows"][ep["tp"]], child[1]["rows"][ep["tp"]]
+        cx, cy = (ca, cb) if swap else (cb, ca)
+        cports = [c[0] for c in child[0]["ports"]]
     hi = min(len(x), len(y), len(rows_in), ep["end"] + 4) - 1
+    if cports:
+        hi = min(hi, len(cx) - 1, len(cy) - 1)
     D = [k for k in range(len(outs)) if any(x[i][k] != y[i][k] for i in range(lo, hi + 1))]
     S = [k for k in range(len(outs)) if k not in D]
-    head = (["row"] + [n for _, n in ins] + [outs[k] for k in S] + [f"X.{outs[k]}" for k in D]
-            + [f"Y.{outs[k]}" for k in D] + [""])
+    CD = [k for k in range(len(cports)) if any(cx[i][k] != cy[i][k] for i in range(lo, hi + 1))]
+    CS = [k for k in range(len(cports)) if k not in CD]
+    head = (["row"] + [n for _, n in ins] + [f"child.{cports[k]}" for k in CS] + [outs[k] for k in S]
+            + [f"X.child.{cports[k]}" for k in CD] + [f"X.{outs[k]}" for k in D]
+            + [f"Y.child.{cports[k]}" for k in CD] + [f"Y.{outs[k]}" for k in D] + [""])
     lines = [" | ".join(head)]
     folded, i = False, lo
     while i <= hi:
         j = i
         while (fold and j + 1 < ep["first"] - 8 and rows_in[j + 1] == rows_in[i] and x[j + 1] == x[i]
-               and y[j + 1] == y[i]):
+               and y[j + 1] == y[i] and (not cports or (cx[j + 1] == cx[i] and cy[j + 1] == cy[i]))):
             j += 1
         folded |= j > i
         cells = ([str(i) if j == i else f"{i}-{j}"] + [hexw(rows_in[i][c], W[n]) for c, n in ins]
-                 + [x[i][k] for k in S] + [x[i][k] for k in D] + [y[i][k] for k in D] + ["<<" if x[i] != y[i] else ""])
+                 + [cx[i][k] for k in CS] + [x[i][k] for k in S] + [cx[i][k] for k in CD] + [x[i][k] for k in D]
+                 + [cy[i][k] for k in CD] + [y[i][k] for k in D] + ["<<" if x[i] != y[i] else ""])
         lines.append(" | ".join(cells))
         i = j + 1
     omitted = (f"Rows 0-{lo - 1} of this testpoint are omitted; on them both candidates' outputs "
                f"were identical.\n" if lo else "")
     ports = "\n".join(f"- {d} {n} [{W[n]} bit]" for d, names in (("input", [n for _, n in ins]), ("output", outs))
                       for n in names)
-    cfg = configuration(mod) if VARIANT in ("2", "3") else ""
+    cfg = configuration(mod) if VARIANT in ("2", "3", "4") else ""
+    if cports:
+        k = children(mod)[0]
+        drv = [c[0] for c in child[0]["ports"] if c[3] == "input"]
+        ret = [c[0] for c in child[0]["ports"] if c[3] == "output"]
+        omitted += (f"- This module instantiates {k}. That child is the given reference implementation: "
+                    f"correct, and identical in both candidates. Columns child.<port> are its ports: "
+                    f"{', '.join(drv)} {'is' if len(drv) == 1 else 'are'} driven by this module, "
+                    f"{', '.join(ret)} {'is' if len(ret) == 1 else 'are'} the child's reply. Outputs of this module "
+                    f"that come straight from the child differ only because of what this module drives "
+                    f"into it. Judge this module's own behaviour against its specification: what it drives "
+                    f"into the child, and its own outputs, given the child's replies.\n")
     if folded:
         omitted += ("A row labelled a-b stands for rows a through b, which are all identical to row a in "
                     "inputs and in both candidates' outputs. There is a clock edge after every one of them, so "
@@ -350,6 +441,8 @@ for run, mod, tag in LIVE:
 rows = []
 for t in targets:
     mod, run = t["mod"], t["run"]
+    if os.environ.get("ARB_ONLY") and mod != os.environ["ARB_ONLY"]:
+        continue
     contract = json.loads((EQ / "corpora" / run / mod / "contract.json").read_text())
     sim = FA["simulator"](mod)
     A, B = sim(t["before"], contract), sim(t["after"], contract)
@@ -372,7 +465,7 @@ for t in targets:
     chosen = pick(eps, t["source"])
     rows.append({**{k: v for k, v in t.items() if k not in ("before", "after")},
                  "episodes_total": len(eps), "cells_total": sum(e["cells"] for e in eps), "asked": chosen,
-                 "_A": A, "_B": B})
+                 "_A": A, "_B": B, "_C": (child_trace(t["before"], mod, run), child_trace(t["after"], mod, run))})
     del G
 
 print(f"{len(rows)} target commits (golden: {sum(r['golden_net'] > 0 for r in rows)} better, "
@@ -388,7 +481,7 @@ if os.environ.get("ARB_DRY"):
         d.mkdir(parents=True, exist_ok=True)
         e = r["asked"][0]
         (d / f"{r['source'].replace(' ', '_')}.{e['tp']}.txt").write_text(
-            SYSTEM + "\n\n" + prompt(r["mod"], r["run"], e, r["_A"], r["_B"], False))
+            SYSTEM + "\n\n" + prompt(r["mod"], r["run"], e, r["_A"], r["_B"], False, r.get("_C")))
     sys.exit(0)
 
 
@@ -401,7 +494,7 @@ async def main():
     sem, budget = asyncio.Semaphore(int(os.environ.get("ARB_PARALLEL", "6"))), {"left": int(os.environ.get("ARB_LIMIT", "100000"))}
     jobs = [(r, e, swap) for r in rows for e in r["asked"] for swap in (False, True)]
     recs = await asyncio.gather(*(judge(client, sem, os.environ["OPENAI_MODEL"],
-                                        prompt(r["mod"], r["run"], e, r["_A"], r["_B"], swap), budget)
+                                        prompt(r["mod"], r["run"], e, r["_A"], r["_B"], swap, r.get("_C")), budget)
                                   for r, e, swap in jobs))
     for (r, e, swap), rec in zip(jobs, recs):
         if rec is None:
@@ -467,5 +560,5 @@ for name, f in RULES.items():
     rw = sum(not f(r) and r["golden_net"] < 0 for r in done)
     out[name] = [kb, kw, rb, rw]
     print(f"| {name} | {kb} / {kw} | {rb} / {rw} |")
-if not os.environ.get("ARB_LIMIT"):
+if not os.environ.get("ARB_LIMIT") and not os.environ.get("ARB_ONLY"):
     (E / f"ARBITRATION-OFFLINE{'' if VARIANT == '1' else '-v' + VARIANT}.json").write_text(json.dumps(out, indent=1, default=str) + "\n")
