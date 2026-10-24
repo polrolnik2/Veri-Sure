@@ -26,6 +26,11 @@ so the two runs of a job diverge from their first commit.
 | sb luna12 | 56.1%, 36.7% | 44.5%, 34.1% (+93 / −9,997) | **54.5%, 35.7%** (+0 / −1,565) |
 | byte_ctrl luna12 | 42.7%, 27.0% | 42.7%, 27.0% (+0 / −159) | 42.7%, 27.0% (unchanged) |
 | bit_ctrl luna12 | 18.4%, 3.2% | 18.4%, 3.2% (unchanged) | 18.5%, **2.8%** (+5,343 / −9,411) |
+| bit_ctrl, against the corrected reference gC | 83.5%, 37.6% | unchanged | **82.0%, 30.3%** (+3,853 / −10,901) |
+
+bit_ctrl's golden never resets `dout` and resets its capture registers low, so its levels against
+golden are mostly golden's own quirks (`BIT-CTRL-GOLDEN.md`). gC removes both. Changes and verdicts
+are the same against either.
 
 ## The commits the judge decided
 

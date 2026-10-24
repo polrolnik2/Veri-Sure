@@ -50,6 +50,13 @@ for job in sys.argv[1:]:
     G = json.loads((EQ / "out" / mod / "golden.json").read_text())
     contract = json.loads((EQ / "corpora" / run / mod / "contract.json").read_text())
     sim = FA["simulator"](mod)
+    #: bit_ctrl's golden never resets dout and resets its capture registers low (golden_variants.py):
+    #: absolute scores are also given against the corrected reference gC
+    GC = None
+    if mod == "i2c_master_bit_ctrl":
+        sys.path.insert(0, str(HERE))
+        from golden_variants import bit_ctrl_corrected
+        GC = sim(bit_ctrl_corrected((FA["DES"] / "i2c" / mod / f"{mod}.v").read_text())[1], contract)
     start = start_of(run, mod)
     S0 = sim(start, contract)
     print(f"\n## {FA['SH'][mod]} {run}\n")
@@ -89,10 +96,19 @@ for job in sys.argv[1:]:
                                    "golden_net": g["cells_fixed"] - g["cells_broken"],
                                    "golden_fixed": g["cells_fixed"], "golden_broken": g["cells_broken"]})
         out["jobs"].append({"run": run, "module": mod, **row})
+        if GC is not None:
+            fc = FA["compare"](S0, sim(delivered, contract), GC)
+            row["corrected"] = {k: fc[k] for k in ("edge_before", "edge_after", "tp_before", "tp_after",
+                                                   "cells_fixed", "cells_broken")}
         print(f"- **{arm}**: final {100 * fin['edge_after']:.1f}% edges (start {100 * fin['edge_before']:.1f}%), "
               f"{100 * fin['tp_after']:.1f}% testpoints (start {100 * fin['tp_before']:.1f}%); cells "
               f"+{fin['cells_fixed']} / -{fin['cells_broken']} vs start; tokens editor {ed_tok}, judge {j_tok}"
               + ("" if row["replay_reproduces"] else "; REPLAY DIFFERS"))
+        if GC is not None:
+            fc = row["corrected"]
+            print(f"  - against the corrected reference gC: final {100 * fc['edge_after']:.1f}% edges (start "
+                  f"{100 * fc['edge_before']:.1f}%), {100 * fc['tp_after']:.1f}% testpoints (start "
+                  f"{100 * fc['tp_before']:.1f}%); cells +{fc['cells_fixed']} / -{fc['cells_broken']}")
         for k, c in enumerate(row["commits"], 1):
             agr = f"{c['agreement'][0]}->{c['agreement'][1]}%" if c["agreement"] else "?"
             jd = "" if c["judge_score"] is None else f", judge {c['judge_score']:+.2f}"
