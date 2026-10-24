@@ -129,7 +129,8 @@ Across the 15 live commits the judge decided (smoke and full), its decision is s
   remaining modes are required or missed by the checks (`DC-FSM-FINAL-MODES.md`,
   `DC-FSM-M4-CHECKS.md`).
 - **The agreement rule keeps reversions toward a reading the peers share.** It reverted dc_fsm's
-  fix (+0.84 points, −413 cells), twice re-applied a bit_ctrl regression (−2,850 cells), and kept
+  fix (+0.84 points, −413 cells), kept a bit_ctrl regression (−2,850 cells) twice, the second
+  time after the judge had undone it, and kept
   byte_ctrl's commit 21 (−4,821).
 - **All checks passing ends the session.** dc_fsm and sb stopped after 2–5 trials, still about
   25% and 64% of testpoints off golden.
