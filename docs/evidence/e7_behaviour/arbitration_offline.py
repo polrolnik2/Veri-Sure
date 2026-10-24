@@ -30,6 +30,16 @@ sentences and rebuild every internal register the marked outputs depend on, edge
 comparing (dc_fsm's write enables depend on a cache-inhibit flag set one edge after a request is
 accepted, not on the input).
 
+VARIANT 3 (ARB_VARIANT=3) is variant 2 with the excerpt fixed for long testpoints, after
+variant 2 abstained on most I2C excerpts (arbitration_why.py): a testpoint that diverges after
+row 40 is shown from reset rather than from 24 rows before the divergence, with each run of rows
+identical to the one before it collapsed into one line labelled with its row range (the last 8
+rows before the divergence are always shown); a design that instantiates a child module gets
+the child's specification and macros too (byte_ctrl's SCL/SDA timing is its bit controller's);
+and the reset sequence is described from the module's own testbench where it is more than rst=1
+over zeroed inputs (the I2C benches also hold nReset low and SCL/SDA high).
+Every other prompt is byte-identical to variant 2's, so its cached answer is reused.
+
 Judge prompts and replies stay in EQ/arbitration (private); the repo gets counts and verdicts.
 ARB_DRY=1 lists targets and episodes without calling; ARB_LIMIT=N stops after N new calls.
 -> docs/evidence/e7/ARBITRATION-OFFLINE.json, tables on stdout.
@@ -141,14 +151,25 @@ makes it combinational; (3) compute the value the specification requires on each
 (4) compare with X and Y. If the specification does not determine the marked outputs, answer \
 "undetermined"; if neither candidate matches it, answer "both wrong". End your reply with one JSON \
 object: {"verdict": "X" | "Y" | "both wrong" | "undetermined", "reason": "<one sentence>"}"""
-if VARIANT == "2":
+if VARIANT in ("2", "3"):
     SYSTEM = SYSTEM2
+
+
+def spec_of(mod):
+    return next(p for p in DES.rglob("description.txt") if p.parent.name == mod).read_text()
+
+
+def children(mod):
+    """The modules this one instantiates (the benchmark's own submodule list), for variant 3."""
+    if VARIANT != "3":
+        return []
+    return FA["submodules"](next(p.parent for p in DES.rglob("description.txt") if p.parent.name == mod), mod)
 
 
 def configuration(mod):
     """The state of every macro the spec names, from preprocessing the design's own include files."""
     task = next(p.parent for p in DES.rglob("description.txt") if p.parent.name == mod)
-    spec = (task / "description.txt").read_text()
+    spec = "".join(spec_of(m) for m in [mod, *children(mod)])
     defs = sorted({p for d in (task, task.parent) for p in d.glob("*define*.v")})
     known = set(re.findall(r"define\s+(\w+)", "".join(p.read_text(errors="replace") for p in defs)))
     names = sorted(set(re.findall(r"\b[A-Z][A-Z0-9_]*_[A-Z0-9_]+\b", spec)) & known)
@@ -166,34 +187,64 @@ def configuration(mod):
                    f"- {n} is defined" + (f" as {state[n][1]}\n" if state[n][1] else "\n") for n in names)
 
 
+def reset_note(mod):
+    """Variant 3: the testbench's own reset sequence, when it is more than rst=1 over zeroed inputs."""
+    tb = (EQ / "work" / mod / "tb.v").read_text()
+    pre_, post_ = tb.split("if (typ == 0) begin", 1)[1].split("repeat (2)", 1)
+    post_ = post_.split("end\n", 2)[1]
+    hold = dict(re.findall(r"i_(\w+) = (\w+);", pre_))
+    rel = dict(re.findall(r"i_(\w+) = (\w+);", post_))
+    if VARIANT != "3" or ({k: v for k, v in hold.items() if v != "0"} == {"rst": "1"} and rel == {"rst": "0"}):
+        return None
+    held = ", ".join(f"{k}={v}" for k, v in hold.items() if v != "0")
+    return (f"- Each testpoint starts with a reset sequence that is not shown: for two clock cycles "
+            f"{held} and every other input 0; then one cycle with "
+            f"{', '.join(f'{k}={v}' for k, v in rel.items())}, the other inputs unchanged. Every register "
+            f"starts from that reset.")
+
+
 def hexw(v, w):
     return format(int(v), "x").zfill(max(1, -(-w // 4)))
 
 
 def prompt(mod, run, ep, A, B, swap):
     stim = json.loads((EQ / "stim" / run / f"{mod}.json").read_text())
-    spec = next(p for p in DES.rglob("description.txt") if p.parent.name == mod).read_text()
+    spec = spec_of(mod) + "".join(f"\n\n## Specification of the child module {k}, which this module "
+                                  f"instantiates\n\n{spec_of(k)}" for k in children(mod))
     tpd = stim["tps"][ep["tp"]]
     rows_in = json.loads(tpd["rows"]) if isinstance(tpd["rows"], str) else tpd["rows"]
     ins = [(j, n) for j, n in enumerate(stim["inputs"]) if n != stim["clock"]]
     outs, W = stim["outputs"], stim["width"]
     x, y = (A[run][ep["tp"]], B[run][ep["tp"]]) if swap else (B[run][ep["tp"]], A[run][ep["tp"]])
-    lo = 0 if ep["first"] <= 40 else ep["first"] - CONTEXT
+    long_ = ep["first"] > 40
+    lo = 0 if not long_ or VARIANT == "3" else ep["first"] - CONTEXT
+    fold = VARIANT == "3" and long_  # collapse repeated rows, all but the 8 before the divergence
     hi = min(len(x), len(y), len(rows_in), ep["end"] + 4) - 1
     D = [k for k in range(len(outs)) if any(x[i][k] != y[i][k] for i in range(lo, hi + 1))]
     S = [k for k in range(len(outs)) if k not in D]
     head = (["row"] + [n for _, n in ins] + [outs[k] for k in S] + [f"X.{outs[k]}" for k in D]
             + [f"Y.{outs[k]}" for k in D] + [""])
     lines = [" | ".join(head)]
-    for i in range(lo, hi + 1):
-        cells = ([str(i)] + [hexw(rows_in[i][j], W[n]) for j, n in ins] + [x[i][k] for k in S]
-                 + [x[i][k] for k in D] + [y[i][k] for k in D] + ["<<" if x[i] != y[i] else ""])
+    folded, i = False, lo
+    while i <= hi:
+        j = i
+        while (fold and j + 1 < ep["first"] - 8 and rows_in[j + 1] == rows_in[i] and x[j + 1] == x[i]
+               and y[j + 1] == y[i]):
+            j += 1
+        folded |= j > i
+        cells = ([str(i) if j == i else f"{i}-{j}"] + [hexw(rows_in[i][c], W[n]) for c, n in ins]
+                 + [x[i][k] for k in S] + [x[i][k] for k in D] + [y[i][k] for k in D] + ["<<" if x[i] != y[i] else ""])
         lines.append(" | ".join(cells))
+        i = j + 1
     omitted = (f"Rows 0-{lo - 1} of this testpoint are omitted; on them both candidates' outputs "
                f"were identical.\n" if lo else "")
     ports = "\n".join(f"- {d} {n} [{W[n]} bit]" for d, names in (("input", [n for _, n in ins]), ("output", outs))
                       for n in names)
-    cfg = configuration(mod) if VARIANT == "2" else ""
+    cfg = configuration(mod) if VARIANT in ("2", "3") else ""
+    if folded:
+        omitted += ("A row labelled a-b stands for rows a through b, which are all identical to row a in "
+                    "inputs and in both candidates' outputs. There is a clock edge after every one of them, so "
+                    "internal counters and registers keep advancing through the range.\n")
     cfg = f"## Configuration\n\nFrom the design's include files:\n{cfg}\n" if cfg else ""
     return f"""## Specification
 
@@ -205,8 +256,7 @@ def prompt(mod, run, ep, A, B, swap):
 
 ## Simulation conventions
 
-- Each testpoint starts with a reset sequence that is not shown: rst is 1 for two clock cycles,
-  then 0 for one cycle. Every register starts from that reset.
+{reset_note(mod) or RESET}
 - In row i the inputs of row i are applied, the outputs are sampled shortly afterwards (before
   the rising clock edge), and then the rising edge occurs. The outputs in row i therefore show
   the state left by the edges of the earlier rows, plus any combinational path from row i's
@@ -219,6 +269,10 @@ def prompt(mod, run, ep, A, B, swap):
 
 {chr(10).join(lines)}
 """
+
+
+RESET = """- Each testpoint starts with a reset sequence that is not shown: rst is 1 for two clock cycles,
+  then 0 for one cycle. Every register starts from that reset."""
 
 
 def parse(text):
