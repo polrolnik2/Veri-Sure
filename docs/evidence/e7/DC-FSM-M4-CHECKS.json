@@ -1,0 +1,187 @@
+{
+ "luna12": {
+  "check": "REQ-0033",
+  "clause": "The OR1200 data-cache FSM asserts biu_read when it is evaluating a miss and tagcomp_miss is 1, or when hit/miss evaluation is complete and a refill load sequenc",
+  "shipped": false,
+  "excluded_by_population": true,
+  "testpoints": 309,
+  "population_convicted": 7,
+  "population": 7,
+  "designs": {
+   "reference model": {
+    "fails": 85,
+    "at_store_miss_eval": 17,
+    "reason": "the expected response never occurred in the window opening a"
+   },
+   "population 0": {
+    "fails": 85,
+    "at_store_miss_eval": 39,
+    "reason": "the expected response never occurred in the window opening a"
+   },
+   "population 1": {
+    "fails": 85,
+    "at_store_miss_eval": 39,
+    "reason": "the expected response never occurred in the window opening a"
+   },
+   "population 2": {
+    "fails": 85,
+    "at_store_miss_eval": 39,
+    "reason": "the expected response never occurred in the window opening a"
+   },
+   "population 3": {
+    "fails": 85,
+    "at_store_miss_eval": 17,
+    "reason": "the expected response never occurred in the window opening a"
+   },
+   "population 4": {
+    "fails": 85,
+    "at_store_miss_eval": 39,
+    "reason": "the expected response never occurred in the window opening a"
+   },
+   "population 5": {
+    "fails": 85,
+    "at_store_miss_eval": 39,
+    "reason": "the expected response never occurred in the window opening a"
+   },
+   "population 6": {
+    "fails": 85,
+    "at_store_miss_eval": 39,
+    "reason": "the expected response never occurred in the window opening a"
+   }
+  }
+ },
+ "luna13": {
+  "check": "REQ-0031",
+  "clause": "The FSM asserts biu_read while evaluating a miss when tagcomp_miss is 1, or when hit/miss evaluation is complete and a refill load sequence is active, and asser",
+  "shipped": false,
+  "excluded_by_population": true,
+  "testpoints": 327,
+  "population_convicted": 7,
+  "population": 7,
+  "designs": {
+   "reference model": {
+    "fails": 76,
+    "at_store_miss_eval": 41,
+    "reason": "the expected response never occurred in the window opening a"
+   },
+   "population 0": {
+    "fails": 76,
+    "at_store_miss_eval": 41,
+    "reason": "the expected response never occurred in the window opening a"
+   },
+   "population 1": {
+    "fails": 76,
+    "at_store_miss_eval": 41,
+    "reason": "the expected response never occurred in the window opening a"
+   },
+   "population 2": {
+    "fails": 76,
+    "at_store_miss_eval": 41,
+    "reason": "the expected response never occurred in the window opening a"
+   },
+   "population 3": {
+    "fails": 76,
+    "at_store_miss_eval": 41,
+    "reason": "the expected response never occurred in the window opening a"
+   },
+   "population 4": {
+    "fails": 76,
+    "at_store_miss_eval": 41,
+    "reason": "the expected response never occurred in the window opening a"
+   },
+   "population 5": {
+    "fails": 76,
+    "at_store_miss_eval": 41,
+    "reason": "the expected response never occurred in the window opening a"
+   },
+   "population 6": {
+    "fails": 76,
+    "at_store_miss_eval": 41,
+    "reason": "the expected response never occurred in the window opening a"
+   }
+  }
+ },
+ "luna14": {
+  "check": "REQ-0032",
+  "clause": "The combined output biu_read is asserted when the FSM is evaluating a miss and tagcomp_miss=1, or when hit/miss evaluation is complete and a refill load sequenc",
+  "shipped": false,
+  "excluded_by_population": true,
+  "testpoints": 316,
+  "population_convicted": 6,
+  "population": 7,
+  "designs": {
+   "reference model": {
+    "fails": 51,
+    "at_store_miss_eval": 51,
+    "reason": "biu_read was not asserted during a specified miss/refill pha"
+   },
+   "population 0": {
+    "fails": 51,
+    "at_store_miss_eval": 51,
+    "reason": "biu_read was not asserted during a specified miss/refill pha"
+   },
+   "population 1": {
+    "fails": 51,
+    "at_store_miss_eval": 51,
+    "reason": "biu_read was not asserted during a specified miss/refill pha"
+   },
+   "population 2": {
+    "fails": 7,
+    "at_store_miss_eval": 7,
+    "reason": "biu_read was not asserted during a specified miss/refill pha"
+   },
+   "population 3": {
+    "fails": 51,
+    "at_store_miss_eval": 51,
+    "reason": "biu_read was not asserted during a specified miss/refill pha"
+   },
+   "population 4": {
+    "fails": 72,
+    "at_store_miss_eval": 50,
+    "reason": "biu_read was not asserted during a specified miss/refill pha"
+   },
+   "population 5": {
+    "fails": 0,
+    "at_store_miss_eval": 0,
+    "reason": ""
+   },
+   "population 6": {
+    "fails": 51,
+    "at_store_miss_eval": 51,
+    "reason": "biu_read was not asserted during a specified miss/refill pha"
+   }
+  }
+ },
+ "prevalence": {
+  "luna12": {
+   "reference model": 0,
+   "population 0": 54,
+   "population 1": 54,
+   "population 2": 54,
+   "population 3": 0,
+   "population 4": 54,
+   "population 5": 54,
+   "population 6": 54
+  },
+  "luna13": {
+   "reference model": 52,
+   "population 0": 52,
+   "population 1": 52,
+   "population 2": 52,
+   "population 3": 52,
+   "population 4": 52,
+   "population 5": 52,
+   "population 6": 52
+  },
+  "luna14": {
+   "reference model": 51,
+   "population 0": 51,
+   "population 1": 51,
+   "population 2": 7,
+   "population 3": 51,
+   "population 4": 50,
+   "population 5": 0,
+   "population 6": 51
+  }
+ }
+}
