@@ -130,6 +130,7 @@ def main() -> int:
                                  *[a for i, x in enumerate(sys.argv[:-1]) if x == "--peer"
                                    for a in ("--peer", sys.argv[i + 1])],
                                  *(["--full-view"] if "--full-view" in sys.argv else []),
+                                 *(["--arbiter"] if "--arbiter" in sys.argv else []),
                                  *[a for e in extras for a in ("--extra", e)],
                                  *([a for d in (task, task.parent) for a in ("--include", str(d))]
                                    if extras else []),

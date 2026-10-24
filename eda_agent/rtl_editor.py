@@ -632,6 +632,11 @@ class _EditSession:
     #: (docs/evidence/e7/FEEDBACK-AUDIT.md, LATCH-OFFLINE.md).
     latch_rule: str = "checks"
     latch_gate: Any = None
+    #: Under the consensus latch, a `spec_arbiter.SpecArbiter` that decides the commits agreement
+    #: cannot: passing requirements rose while agreement neither rose by the margin nor fell by
+    #: more than the arbiter's band. It asks which behaviour the specification requires where the
+    #: two designs' outputs diverge. When every answer abstains, the tolerance rule decides.
+    latch_arbiter: Any = None
     #: Best agreement seen, when `latch_rule` is "consensus": `note_best` ranks on it then.
     best_agreement: float | None = None
     #: The accepted design's agreement, for stall detection under the consensus latch.
@@ -1577,7 +1582,30 @@ class _EditSession:
                  if req_before is not None and req_after is not None else 0)
         within = (not consensus.get("rises") and dpass > 0 and a0 is not None and a1 is not None
                   and a1 > a0 - tol)
-        if consensus.get("rises") or within:
+        keep = bool(consensus.get("rises") or within)
+        arb = None
+        if (self.latch_arbiter is not None and not consensus.get("rises") and dpass > 0
+                and a0 is not None and a1 is not None and a1 > a0 - self.latch_arbiter.band):
+            # **AGREEMENT CANNOT DECIDE THIS ONE.** Offline, in this range a fix and a regression
+            # looked the same to it; a judgment on the cells the commit changed told them apart.
+            arb = self.latch_arbiter.decide(old_file_content, self.read_rtl())
+            result["arbitration"] = {k: arb[k] for k in ("score", "asked", "answers", "tokens")}
+            if arb["score"]:
+                keep = arb["score"] > 0
+        arb_note = ""
+        if arb is not None and arb["score"]:
+            favoured = sorted({e["tp"] for e in arb["episodes"]
+                               if sum((a == "after") - (a == "before") for a in e["answers"]) < 0})
+            arb_note = (f"  An independent judgment against the specification, on {arb['asked']} testpoint(s) "
+                        f"where this batch changes the outputs, favoured "
+                        f"{'YOUR CHANGE' if arb['score'] > 0 else 'THE PREVIOUS BEHAVIOUR'} "
+                        f"(score {arb['score']:+.2f} on -1..+1)"
+                        + (f"; it preferred the previous behaviour on {', '.join(favoured)}" if favoured else "")
+                        + ".")
+        elif arb is not None:
+            arb_note = ("  An independent judgment against the specification could not decide it (every "
+                        "answer abstained), so the tolerance rule did.")
+        if keep:
             self.last_mismatch_cnt = sim_mismatch_cnt
             if new_fail_time is not None:
                 self.last_fail_time = int(new_fail_time)
@@ -1587,9 +1615,12 @@ class _EditSession:
             result["accept_reason"] = (
                 (f"LATCHED ON AGREEMENT: the design now agrees with the {n} independently generated "
                  f"designs on {pct(a1)} of edges (was {pct(a0)}).") if consensus.get("rises") else
+                (f"LATCHED ON THE SPECIFICATION: passing requirements rose and agreement with the {n} "
+                 f"independently generated designs moved {pct(a0)} -> {pct(a1)}, too little to decide "
+                 f"by.") if arb is not None and arb["score"] else
                 (f"LATCHED ON THE CHECKS, WITHIN TOLERANCE: passing requirements rose and agreement "
                  f"with the {n} independently generated designs fell by less than "
-                 f"{100 * tol:.1f} points ({pct(a0)} -> {pct(a1)}).")) + f"{req_note}{away_note}"
+                 f"{100 * tol:.1f} points ({pct(a0)} -> {pct(a1)}).")) + f"{req_note}{away_note}{arb_note}"
             self.accepted_agreement = a1
             self.best_rtl, self.best_agreement = self.read_rtl(), a1
             if req_after is not None:
@@ -1630,9 +1661,12 @@ class _EditSession:
             f"Commit did NOT latch: agreement with the {n} independently generated designs went "
             f"{pct(a0)} -> {pct(a1)} of edges. A commit latches when agreement RISES by at least "
             f"{100 * margin:.1f} points, or when passing requirements rise and agreement falls by "
-            f"less than {100 * tol:.1f} points. The "
+            f"less than {100 * tol:.1f} points"
+            + (" -- and, when agreement moves too little to decide, an independent judgment against the "
+               "specification favours the change" if self.latch_arbiter is not None else "")
+            + ". The "
             f"accepted RTL is unchanged and your staged edits are kept -- adjust them and commit "
-            f"again.{req_note}{away_note}  A change that satisfies a check while moving outputs "
+            f"again.{req_note}{away_note}{arb_note}  A change that satisfies a check while moving outputs "
             f"away from every independent reading of the specification is more likely a new "
             f"defect than a fix.")
         return result
@@ -2624,6 +2658,9 @@ class RTLEditor:
         #: `_EditSession.latch_rule`.
         latch_rule: str = "checks",
         latch_gate: object | None = None,
+        #: A `spec_arbiter.SpecArbiter` for the consensus latch's undecided commits (see
+        #: `_EditSession.latch_arbiter`). Needs latch_rule="consensus".
+        latch_arbiter: object | None = None,
         #: Show the agent the WHOLE design, not only the suspect blocks a failing check slices,
         #: and let it edit anywhere. A slice hides the other readers of a signal, which is where
         #: an edit's unintended consequences land (docs/evidence/e7/REPAIR-ANATOMY.md).
@@ -2638,8 +2675,11 @@ class RTLEditor:
             raise ValueError(f"latch_rule must be 'checks' or 'consensus', not {latch_rule!r}")
         if latch_rule == "consensus" and latch_gate is None:
             raise ValueError("latch_rule='consensus' needs a latch_gate")
+        if latch_arbiter is not None and latch_rule != "consensus":
+            raise ValueError("latch_arbiter needs latch_rule='consensus'")
         self._latch_rule = latch_rule
         self._latch_gate = latch_gate
+        self._latch_arbiter = latch_arbiter
         self._full_view = bool(full_view)
         self.max_trials = int(max_trials)
         self._memory_window = int(memory_window)
@@ -3010,6 +3050,7 @@ class RTLEditor:
             self._session.gradient_noun = "failing check instances"
         self._session.latch_rule = self._latch_rule
         self._session.latch_gate = self._latch_gate
+        self._session.latch_arbiter = self._latch_arbiter
         if self._latch_rule == "consensus":
             self._session.accepted_agreement = self._latch_gate.agreement(self._session.read_rtl())
         # The caller has ALREADY run the reviewer once -- that is where

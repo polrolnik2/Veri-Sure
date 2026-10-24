@@ -45,6 +45,10 @@ the same specification, rises on the run's own stimulus (`eda_agent/consensus_ga
 against golden commit by commit, the first is unrelated in direction to golden and the second
 tracks it (docs/evidence/e7/FEEDBACK-AUDIT.md, LATCH-OFFLINE.md). The peers are simulated, never
 shown to the editor. `--full-view` gives the editor the whole design and lets it edit anywhere.
+`--arbiter` (consensus latch only): a commit that raises passing requirements while agreement moves
+too little to decide by goes to a judgment against the specification on the cells it changes
+(`eda_agent/spec_arbiter.py`, docs/evidence/e7/ARBITRATION-OFFLINE.md); its prompts and replies
+are logged under `<out-dir>/spec_arbiter/`.
 """
 from __future__ import annotations
 
@@ -95,8 +99,9 @@ MARGIN = _opt("--latch-margin")
 TOLERANCE = _opt("--latch-tolerance")
 PEERS = [sys.argv[i + 1] for i, a in enumerate(sys.argv[:-1]) if a == "--peer"]
 FULL_VIEW = "--full-view" in sys.argv
-if LATCH not in ("checks", "consensus") or (LATCH == "consensus" and not PEERS):
-    print("--latch must be checks or consensus, and consensus needs at least one --peer")
+ARBITER = "--arbiter" in sys.argv
+if LATCH not in ("checks", "consensus") or (LATCH == "consensus" and not PEERS) or (ARBITER and LATCH != "consensus"):
+    print("--latch must be checks or consensus, consensus needs at least one --peer, and --arbiter needs consensus")
     raise SystemExit(2)
 if FEEDBACK not in SpecflowReviewer.FEEDBACK:
     print(f"--feedback must be one of {SpecflowReviewer.FEEDBACK}")
@@ -204,6 +209,18 @@ if LATCH == "consensus":
                                   tolerance=None if TOLERANCE is None else float(TOLERANCE) / 100)
     print(f"consensus latch: {len(gate.peers)} of {len(PEERS)} peer(s) simulated on "
           f"{len(gate.tps)} testpoint(s)", flush=True)
+arbiter = None
+if ARBITER:
+    from eda_agent.spec_arbiter import SpecArbiter  # noqa: E402
+
+    #: a child's specification is the description.txt beside its source in the benchmark tree
+    kids = {Path(f).stem: (Path(f).parent / "description.txt").read_text(encoding="utf-8")
+            for f in EXTRA if (Path(f).parent / "description.txt").is_file()}
+    arbiter = SpecArbiter(gate=gate, spec=spec, children=kids,
+                          include_dirs=[*INCLUDE, str(spec_dir), str(spec_dir.parent)], cfg=cfg,
+                          workdir=OUT / "spec_arbiter")
+    print(f"spec arbiter: children {sorted(kids) or 'none'}; macros: "
+          f"{arbiter.config.count(chr(10))}", flush=True)
 
 
 def _tally(rnd: int, failing: int) -> dict:
@@ -260,7 +277,7 @@ async def _drive() -> None:
                            stimulus_stager=stager,
                            requirements=load_requirement_views(OUT, contract),
                            contract=contract, latch_rule=LATCH, latch_gate=gate,
-                           full_view=FULL_VIEW)
+                           latch_arbiter=arbiter, full_view=FULL_VIEW)
         _, repaired, used, _ = await editor.chat(
             spec=spec, output_dir_per_run=str(OUT), sim_failed_log=sim_output,
             sim_mismatch_cnt=failing, contract_json=contract_json,
@@ -287,7 +304,7 @@ SUMMARY.write_text(json.dumps({
     "run": str(RUN), "module": top, "bodies": len(oracles),
     "requirements": n_req, "set": "shipped" if shipped else "oracles",
     "trials": TRIALS, "rounds": ROUNDS, "feedback": FEEDBACK,
-    "latch": LATCH, "peers": PEERS, "full_view": FULL_VIEW,
+    "latch": LATCH, "peers": PEERS, "full_view": FULL_VIEW, "arbiter": ARBITER,
     "latch_margin_points": None if gate is None else 100 * gate.min_gain,
     "latch_tolerance_points": None if gate is None else 100 * gate.tolerance,
     "extra_sources": EXTRA, "include_dirs": INCLUDE,

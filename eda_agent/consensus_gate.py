@@ -123,6 +123,10 @@ class ConsensusGate:
         self.outputs = [p["name"] for p in io if p.get("dir") == "output"]
         width = {p["name"]: int(p.get("width") or 1) for p in io}
         resets = [n for n in self.inputs if is_reset(n)]
+        #: kept for `SpecArbiter`, which shows a judge the same stimulus and reset this bench applies
+        self.width, self.rows_by_tp = width, rows_by_tp
+        self.idle = {n: int(v or 0) for n, v in dict(idle_values(contract)).items()}
+        self.resets, self.inactive = resets, {n: inactive_value(n) for n in resets}
         self.include_dirs = [str(d) for d in include_dirs]
         self.extra_sources = [str(f) for f in extra_sources]
         self.workdir = Path(workdir or tempfile.mkdtemp(prefix="consensus_gate_"))
