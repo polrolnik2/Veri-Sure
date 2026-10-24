@@ -113,3 +113,52 @@ tested. It makes two changes, both generic:
   safe behaviour.
 - **Cost.** About 77k output tokens per commit judged. Only commits the latch cannot decide would
   be sent: 22 of about 180 here.
+
+## Why variant 2 does not transfer to the I2C modules
+
+Figures come from `e7_behaviour/arbitration_why.py`. The judge's reasons are counted by keyword,
+not quoted.
+
+| | dc_fsm | sb | bit_ctrl | byte_ctrl |
+|---|---|---|---|---|
+| testpoint length, median rows | 20 | 21 | 45 | 1,078 |
+| first divergence, median row | 4 | 3.5 | 22 | 94 |
+| excerpts with the history cut off | 4 / 96 | 2 / 16 | 6 / 24 | 34 / 40 |
+| variant 2 abstentions | 0 / 96 | 6 / 16 | 18 / 24 | 30 / 40 |
+| excerpts variant 1 had right that variant 2 abstains on | 0 | 1 | 1 | 6 |
+
+Three causes. None is the judge reasoning worse on I2C.
+
+1. **The excerpt does not hold the history.**
+   - OR1200 testpoints are short, and they diverge a few rows after reset, so the excerpt shows
+     every edge from reset.
+   - byte_ctrl testpoints are long because the bus clock is divided down, and they diverge late.
+     34 of its 40 excerpts start mid-transaction, where variant 2's rebuild from reset cannot
+     begin.
+2. **The judge was not given a spec that fixes the cycle.**
+   - The dc_fsm spec gives each write enable's equation and the edge at which each flag is set.
+   - bit_ctrl's most-changed output is `al`. It depends on the filtered SDA, and the spec says
+     only that the filter's sampling interval is derived from `clk_cnt` "through `filter_cnt`";
+     it gives no formula.
+   - byte_ctrl's most-changed output is `sda_oen`. Its spec says the SCL/SDA timing belongs to the
+     child `i2c_master_bit_ctrl`, and "this module does not directly handle low-level SCL/SDA
+     timing". The judge was shown only byte_ctrl's spec.
+   - The abstention reasons agree. For byte_ctrl, 22 of 30 say the spec does not determine the
+     marked outputs, and 17 name cycle timing. For bit_ctrl, 12 of 18 name the arbitration or bus
+     state.
+3. **Variant 2 is built to refuse a guess.** Variant 1 inspects the excerpt without the step-by-step
+   rebuild, and its decisive I2C answers were right 34 of 40 times. Variant 2 abstains on 7 of the
+   16 I2C excerpts variant 1 had right.
+   - Using variant 1's answer where variant 2 abstains does not rescue the I2C commits: 4 of 8
+     decided correctly, against 5 of 8 for variant 1 alone.
+
+The differences themselves are similar in kind across modules: mostly values, not 1–3 row time
+shifts (bit_ctrl 11 of 12, byte_ctrl 15 of 20, dc_fsm 47 of 48).
+
+**What would carry it across** is the judge's input, not its model:
+- the whole testpoint, with unchanged rows collapsed so a 1,000-row I2C testpoint fits;
+- the spec of every child module the design instantiates.
+
+Where the spec still leaves the cycle open, as with bit_ctrl's filter interval, abstaining and
+falling back to the latch is the correct outcome. Arbitration can only decide what the spec
+decides.
