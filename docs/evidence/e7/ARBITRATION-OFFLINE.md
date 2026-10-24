@@ -162,3 +162,41 @@ shifts (bit_ctrl 11 of 12, byte_ctrl 15 of 20, dc_fsm 47 of 48).
 Where the spec still leaves the cycle open, as with bit_ctrl's filter interval, abstaining and
 falling back to the latch is the correct outcome. Arbitration can only decide what the spec
 decides.
+
+## Variants 3 and 4: fixing what the judge was shown
+
+Three of the causes above were defects in how the excerpts were built, not limits of the judge:
+- the history was cut 24 rows before the divergence;
+- byte_ctrl's child module was missing;
+- the reset description was written for OR1200. The I2C benches also hold `nReset` low and
+  SCL/SDA high.
+
+Two variants fix them:
+- **Variant 3** shows a testpoint that diverges after row 40 from reset, with each run of
+  identical rows collapsed into one line. byte_ctrl's longest testpoint goes from 949 rows to
+  105 lines. It adds each child module's specification and macros, and takes the reset sequence
+  from the module's own bench.
+- **Variant 4** also adds the child's ports as columns, probed in each candidate's own simulation
+  (`byte_child_drive.py`). byte_ctrl's bus pins come straight from the benchmark's reference bit
+  controller, identical in both candidates. So they differ only because the byte FSM drives
+  different `cmd` / `din` into it, a median 5 rows earlier.
+
+Prompts that neither variant changes are byte-identical to variant 2's and reuse its answers.
+
+| | variant 2 | variant 3 | variant 4 |
+|---|---|---|---|
+| decisive answers right | 112 / 120 | 139 / 151 | 132 / 139 |
+| — bit_ctrl | 5 / 6 | 10 / 10 | 10 / 10 |
+| — byte_ctrl | 6 / 8 | 28 / 35 | 21 / 23 |
+| I2C abstentions | 48 of 64 | 17 of 64 | 29 of 64 (15 of them "both wrong" on byte_ctrl) |
+| commits kept better / worse | 11 / 1 | 14 / 2 | **15 / 1** |
+| commits refused better / worse | 5 / 5 | 2 / 4 | 1 / 5 |
+| new output tokens | 1.69M (all) | 1.13M (70 calls) | 0.88M (40 byte_ctrl calls) |
+
+- **Variant 4 decides every commit as a perfect judge on the same excerpts would:** 20 of 22.
+  - The two it misses are a dc_fsm luna14 regression it is wrong about, and a byte_ctrl fix whose
+    sampled excerpts mostly show the edit breaking things.
+- **byte_ctrl's 15 "both wrong" answers in variant 4 are plausibly right.** With the child's
+  `cmd` visible, both candidates can be seen sending READ (code 8) for a write request: the
+  command-code misreading the start and its peers share.
+- **The same caveat as before applies:** every variant was designed on these commits.
