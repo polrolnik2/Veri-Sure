@@ -79,9 +79,11 @@ for job in sys.argv[1:]:
             g = FA["compare"](sim(c["before"], contract), sim(c["submitted"], contract), G)
             a = arbs[i] if i < len(arbs) else None
             m = re.search(r"([\d.]+)% -> ([\d.]+)%", c["reason"])
+            w = re.search(r"on ([\d.]+)% of edges \(was ([\d.]+)%\)", c["reason"])  # LATCHED ON AGREEMENT
+            agreement = m.groups() if m else (w.group(2), w.group(1)) if w else None
             row["commits"].append({"how": how(c["reason"], c["latched"]),
                                    "passing": (c["requirements"] or {}).get("passing"),
-                                   "agreement": m.groups() if m else None,
+                                   "agreement": agreement,
                                    "judge_score": None if not a else a.get("score"),
                                    "judge_tokens": None if not a else a.get("tokens"),
                                    "golden_net": g["cells_fixed"] - g["cells_broken"],
