@@ -2,8 +2,6 @@
  "prefix": "full1-",
  "jobs": [
   {
-   "run": "luna14",
-   "module": "or1200_dc_fsm",
    "arm": "cons-fv",
    "commits": [
     {
@@ -81,11 +79,11 @@
    "cells_fixed": 77,
    "cells_broken": 84,
    "editor_output_tokens": 99212,
-   "judge_output_tokens": 0
+   "judge_output_tokens": 0,
+   "run": "luna14",
+   "module": "or1200_dc_fsm"
   },
   {
-   "run": "luna14",
-   "module": "or1200_dc_fsm",
    "arm": "cons-fv-arb",
    "commits": [
     {
@@ -150,11 +148,11 @@
    "cells_fixed": 77,
    "cells_broken": 4,
    "editor_output_tokens": 93415,
-   "judge_output_tokens": 171336
+   "judge_output_tokens": 171336,
+   "run": "luna14",
+   "module": "or1200_dc_fsm"
   },
   {
-   "run": "luna12",
-   "module": "or1200_sb",
    "arm": "cons-fv",
    "commits": [
     {
@@ -193,11 +191,11 @@
    "cells_fixed": 0,
    "cells_broken": 1565,
    "editor_output_tokens": 31624,
-   "judge_output_tokens": 0
+   "judge_output_tokens": 0,
+   "run": "luna12",
+   "module": "or1200_sb"
   },
   {
-   "run": "luna12",
-   "module": "or1200_sb",
    "arm": "cons-fv-arb",
    "commits": [
     {
@@ -640,11 +638,11 @@
    "cells_fixed": 460,
    "cells_broken": 1566,
    "editor_output_tokens": 1010424,
-   "judge_output_tokens": 44212
+   "judge_output_tokens": 44212,
+   "run": "luna12",
+   "module": "or1200_sb"
   },
   {
-   "run": "luna12",
-   "module": "i2c_master_byte_ctrl",
    "arm": "cons-fv",
    "commits": [
     {
@@ -914,11 +912,11 @@
    "cells_fixed": 23797,
    "cells_broken": 15853,
    "editor_output_tokens": 710111,
-   "judge_output_tokens": 0
+   "judge_output_tokens": 0,
+   "run": "luna12",
+   "module": "i2c_master_byte_ctrl"
   },
   {
-   "run": "luna12",
-   "module": "i2c_master_byte_ctrl",
    "arm": "cons-fv-arb",
    "commits": [
     {
@@ -1211,11 +1209,11 @@
    "cells_fixed": 29439,
    "cells_broken": 16171,
    "editor_output_tokens": 736483,
-   "judge_output_tokens": 561589
+   "judge_output_tokens": 561589,
+   "run": "luna12",
+   "module": "i2c_master_byte_ctrl"
   },
   {
-   "run": "luna12",
-   "module": "i2c_master_bit_ctrl",
    "arm": "cons-fv",
    "commits": [
     {
@@ -1612,11 +1610,19 @@
    "cells_fixed": 898,
    "cells_broken": 3109,
    "editor_output_tokens": 687065,
-   "judge_output_tokens": 0
-  },
-  {
+   "judge_output_tokens": 0,
    "run": "luna12",
    "module": "i2c_master_bit_ctrl",
+   "corrected": {
+    "edge_before": 0.8349967089412869,
+    "edge_after": 0.8242511660425728,
+    "tp_before": 0.3756906077348066,
+    "tp_after": 0.30994475138121547,
+    "cells_fixed": 302,
+    "cells_broken": 3705
+   }
+  },
+  {
    "arm": "cons-fv-arb",
    "commits": [
     {
@@ -1890,7 +1896,17 @@
    "cells_fixed": 2842,
    "cells_broken": 7180,
    "editor_output_tokens": 757685,
-   "judge_output_tokens": 559903
+   "judge_output_tokens": 559903,
+   "run": "luna12",
+   "module": "i2c_master_bit_ctrl",
+   "corrected": {
+    "edge_before": 0.8349967089412869,
+    "edge_after": 0.8176312565545607,
+    "tp_before": 0.3756906077348066,
+    "tp_after": 0.30939226519337015,
+    "cells_fixed": 2171,
+    "cells_broken": 7851
+   }
   }
  ]
 }
