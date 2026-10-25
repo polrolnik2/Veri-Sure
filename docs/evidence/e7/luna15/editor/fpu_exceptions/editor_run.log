@@ -1,0 +1,11 @@
+--- editor /home/user/runs/luna15/fpu_exceptions start 2026-10-12T15:47:37Z on fbf35f2
+== RTL editor
+   - :0: Verilog $finish
+   
+   ROUND 3: 128 pass, 6 FAIL, 9 abstain of 143 requirement(s); 76 failing testpoint(s)
+     failing: REQ-0019, REQ-0126, REQ-0136, REQ-0143, REQ-0152, REQ-0161
+   
+   FINAL rtl.sv: 436 lines; summary /home/user/runs/luna15/results/fpu_exceptions/editor_summary.json
+   -> exit 0 (log /home/user/runs/luna15/results/fpu_exceptions/editor.log)
+== ChipVerilog verdict: function_fail (equivalence, bounded_seq)
+--- editor exited 0 at 2026-10-12T18:41:31Z

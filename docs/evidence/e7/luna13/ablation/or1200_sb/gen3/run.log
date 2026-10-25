@@ -1,0 +1,11 @@
+--- gen /home/user/runs/luna13/or1200_sb gen3 start 2026-10-15T09:33:55Z on 187ef94
+== RTL editor
+   
+   ROUND 0: 28 pass, 7 FAIL, 31 abstain of 66 requirement(s); 156 failing testpoint(s)
+     failing: REQ-0004, REQ-0016, REQ-0017, REQ-0018, REQ-0038, REQ-0074, REQ-0082
+   
+   FINAL rtl.sv: 161 lines; summary /home/user/runs/luna13/results/or1200_sb/gen3/editor_summary.json
+   USAGE {"input": 10270, "cached": 0, "output": 14501, "reasoning": 0, "calls": 1, "cache_hit_rate": 0.0}
+   -> exit 0 (log /home/user/runs/luna13/results/or1200_sb/gen3/editor.log)
+== ChipVerilog verdict: pass (equivalence, induction)
+--- gen exited 0 at 2026-10-15T09:38:08Z

@@ -1,0 +1,37 @@
+bound 23 probe(s), 0 left unbound:
+   clk_en                       w=1  values seen [0, 1]
+   cnt_zero                     w=1  values seen [0, 1]
+   cscl                         w=1  values seen [0, 1]
+   csda                         w=1  values seen [0, 1]
+   dscl                         w=1  values seen [0, 1]
+   dsda                         w=1  values seen [0, 1]
+   filter_cnt_expired           w=1  values seen [0, 1]
+   fscl                         w=3  values seen [0, 1, 2, 3, 4, 5, 6, 7]
+   fsda                         w=3  values seen [0, 1, 2, 3, 4, 5, 6, 7]
+   fsm_active                   w=1  values seen [0, 1]
+   in_idle                      w=1  values seen [0, 1]
+   in_read_sequence             w=1  values seen [0, 1]
+   in_start_sequence            w=1  values seen [0, 1]
+   in_stop_sequence             w=1  values seen [0, 1]
+   in_write_sequence            w=1  values seen [0, 1]
+   scl_sync                     w=1  values seen [0, 1]
+   sda_chk                      w=1  values seen [0, 1]
+   slave_wait                   w=1  values seen [0, 1]
+   sscl                         w=1  values seen [0, 1]
+   sscl_rise                    w=1  values seen [0, 1]
+   ssda                         w=1  values seen [0, 1]
+   sta_condition                w=1  values seen [0, 1]
+   sto_condition                w=1  values seen [0, 1]
+
+/home/user/runs/luna15/after_oracles/i2c_master_bit_ctrl
+scoring the SHIPPED set (shipped.json): 108 bodies over 106 requirement(s); 462 golden trace(s)
+
+SPAN       100/119 behavioural = 84.0%   (149 minted, 132 state an observable obligation)
+BLINDNESS  31087/42065 cells = 73.9%   (population 7, effective_size 84)
+AUDIT      12/93 judgeable = 12.9%
+ACCEPTS    1 of 7 design(s)
+  note: 108 check bodies over 106 requirement(s): 2 requirement(s)' worth of ADDITIONAL bodies are carried. span and audit count requirements (106); blindness and effective_size count bodies (108), because a cell is separated by a check and a second body is a second chance to separate it
+  note: audit is over the 93 of 100 accepted check(s) the control can be judged on, and says so rather than reporting a rate over a denominator it does not have
+
+convicting golden: 14  REQ-0018[behav] REQ-0057[scaff] REQ-0061[scaff] REQ-0062[behav] REQ-0065[behav] REQ-0104[behav] REQ-0113[behav] REQ-0114[behav] REQ-0120[behav] REQ-0121[behav] REQ-0127[behav] REQ-0131[behav] REQ-0134[behav] REQ-0137[behav]
+target span>0.90 no  blindness<0.10 no  audit=0 no

@@ -1,0 +1,7 @@
+== fpu_exceptions
+SPAN       73/85 behavioural = 85.9%   (172 minted, 167 state an observable obligation)
+BLINDNESS  74/687 cells = 10.8%   (population 7, effective_size 111)
+AUDIT      43/71 judgeable = 60.6%
+ACCEPTS    1 of 7 design(s)
+target span>0.90 no  blindness<0.10 no  audit=0 no
+bound AUDIT      43/71 judgeable = 60.6%

@@ -1,0 +1,159 @@
+{
+  "checks": {
+    "accepted": 123,
+    "corpus_bodies": 587,
+    "corpus_requirements": 148
+  },
+  "contract": {
+    "declared_probes": 24,
+    "module": "i2c_master_bit_ctrl",
+    "ports": 17,
+    "probe_names": [
+      "active_command",
+      "clk_en",
+      "cnt_zero",
+      "cscl",
+      "csda",
+      "dscl",
+      "dsda",
+      "filter_cnt",
+      "fscl",
+      "fsda",
+      "idle",
+      "read_sample_window",
+      "read_sequence",
+      "scl_sync",
+      "sda_chk",
+      "slave_wait",
+      "sscl",
+      "ssda",
+      "sta_condition",
+      "start_sequence",
+      "sto_condition",
+      "stop_sequence",
+      "write_sequence",
+      "write_stable_high_phase"
+    ]
+  },
+  "files": {
+    "contract.json": {
+      "bytes": 26710,
+      "sha256": "5e30fafcf59e6f9592d748644e8d348f2bbc35ffd1ff3862ef680f08a5a69b69"
+    },
+    "coverage_model.json": {
+      "bytes": 272048,
+      "sha256": "a9e4262ae127f035f930852583c7a7a8f015dd672b5fb3ac97638b06b9aa30dd"
+    },
+    "normalized.json": {
+      "bytes": 303330,
+      "sha256": "19764e8bd19b6889f27b123839310d5755e3f0c5c830cbd50d4573af44aa0a1f"
+    },
+    "oracles.json": {
+      "bytes": 1908797,
+      "sha256": "e94a17eaee10f0a757012eebc7e46b5946eee3249a562e2d7c6640f490b11a75"
+    },
+    "population/0.py": {
+      "bytes": 8911,
+      "sha256": "81aa95739ffddd0b3d65e243483f89bcd001c8d579b54e3f71f101ff70cc3251"
+    },
+    "population/1.py": {
+      "bytes": 9267,
+      "sha256": "a21e6b9efa9ff8ec7b92ea3d29e87887e3b775accce3a06b2fe08adb1d931c70"
+    },
+    "population/2.py": {
+      "bytes": 10107,
+      "sha256": "405c9979d2041cdb25ed90633d96bc31cc0ff409d7d9a8105640e85919fdccd9"
+    },
+    "population/3.py": {
+      "bytes": 9943,
+      "sha256": "bb439ac653b9a16fcc7b404aff5c1d294f8561edb25f489ef61972cecd0a36fe"
+    },
+    "population/4.py": {
+      "bytes": 8457,
+      "sha256": "7dac5bbb2af7442a891b49b6c307bc0561c29f6cab9d83804e41ab403439957a"
+    },
+    "population/5.py": {
+      "bytes": 9150,
+      "sha256": "89f5b6b95ea1153e321b2a6c61f867623c10ef2e04a84310233fc3bdf473cce9"
+    },
+    "population/6.py": {
+      "bytes": 9775,
+      "sha256": "ecae229730f3d846cd912252e1dc3600e0cbdb0fcbd990e0c6473e203f19c7d7"
+    },
+    "probes.json": {
+      "bytes": 19601,
+      "sha256": "296c6b7faa5c4b35e2fb61d28ca99535cc645ca81cb7397395f2d4ee074535af"
+    },
+    "ref_model.py": {
+      "bytes": 8656,
+      "sha256": "4f7a01da1d51fbe7f05d67711a0141836de341b8ce8452d76d21cf53e01cd99e"
+    },
+    "requirements.json": {
+      "bytes": 124166,
+      "sha256": "22119e437bb4e9f5add0eeb245647eaeacbd4724aad3dfe9d94ac06dc88e09dc"
+    },
+    "scorecard.json": {
+      "bytes": 767,
+      "sha256": "707d44dbe7dcae5ce7d6dec8eb926e57e6dd5d19c8296e7ed457b092cbfa972f"
+    },
+    "stimulus.json": {
+      "bytes": 408010,
+      "sha256": "aa5a2335240a8e6f0f8531504ab567bdf4c787caff780025df0a820a591a4717"
+    },
+    "testplan.json": {
+      "bytes": 451822,
+      "sha256": "5af310bab6632ec8f6a47e18431edfeb71fb24655fc41f285011c4e68e4840fd"
+    }
+  },
+  "missing": [],
+  "name": "full7",
+  "packed_at": "2026-09-23T21:16:22+00:00",
+  "population": {
+    "distinct": 7,
+    "members": 7,
+    "probe_ports": [
+      "active_command",
+      "clk_en",
+      "cnt_zero",
+      "cscl",
+      "csda",
+      "dscl",
+      "dsda",
+      "filter_cnt",
+      "fscl",
+      "fsda",
+      "idle",
+      "read_sample_window",
+      "read_sequence",
+      "scl_sync",
+      "sda_chk",
+      "slave_wait",
+      "sscl",
+      "ssda",
+      "sta_condition",
+      "start_sequence",
+      "sto_condition",
+      "stop_sequence",
+      "write_sequence",
+      "write_stable_high_phase"
+    ],
+    "probe_ports_identical_across_members": true
+  },
+  "probe_agreement": {
+    "only_in_contract": [],
+    "only_in_population": [],
+    "population_matches_contract": true
+  },
+  "recorded_scorecard": {
+    "audit": 0.06666666666666667,
+    "blindness": 0.24496461622210125,
+    "cells": 29392,
+    "control_convicted_by": 1,
+    "control_judges": 15,
+    "effective_size": 107,
+    "population": 7,
+    "span": 0.9819819819819819,
+    "trusted": 109
+  },
+  "source": "/tmp/claude-0/-home-user-Veri-Sure/12bb865e-7a51-5506-b55a-e5ac7cf72a4a/scratchpad/full7/specflow"
+}

@@ -1,0 +1,197 @@
+{
+  "run": "/home/user/runs-cf/luna14/i2c_master_byte_ctrl",
+  "module": "i2c_master_byte_ctrl",
+  "bodies": 99,
+  "requirements": 98,
+  "set": "shipped",
+  "trials": 20,
+  "rounds": 3,
+  "feedback": "checks",
+  "extra_sources": [
+    "/home/user/Veri-Sure/benchmarks/chipverilog/Des/i2c/i2c_master_bit_ctrl/i2c_master_bit_ctrl.v"
+  ],
+  "include_dirs": [
+    "/home/user/Veri-Sure/benchmarks/chipverilog/Des/i2c/i2c_master_byte_ctrl",
+    "/home/user/Veri-Sure/benchmarks/chipverilog/Des/i2c"
+  ],
+  "seconds": 24882,
+  "history": [
+    {
+      "round": 0,
+      "requirements": 98,
+      "pass": 72,
+      "fail": 14,
+      "abstain": 12,
+      "failing_check_instances": 323,
+      "failing": [
+        "REQ-0003",
+        "REQ-0012",
+        "REQ-0013",
+        "REQ-0015",
+        "REQ-0031",
+        "REQ-0047",
+        "REQ-0062",
+        "REQ-0063",
+        "REQ-0069",
+        "REQ-0070",
+        "REQ-0084",
+        "REQ-0116",
+        "REQ-0121",
+        "REQ-0122"
+      ],
+      "abstaining": [
+        "REQ-0001",
+        "REQ-0002",
+        "REQ-0008",
+        "REQ-0046",
+        "REQ-0058",
+        "REQ-0067",
+        "REQ-0068",
+        "REQ-0077",
+        "REQ-0086",
+        "REQ-0091",
+        "REQ-0096",
+        "REQ-0100"
+      ],
+      "rtl_lines": 257,
+      "editor_trials_used": 10
+    },
+    {
+      "round": 1,
+      "requirements": 98,
+      "pass": 77,
+      "fail": 9,
+      "abstain": 12,
+      "failing_check_instances": 288,
+      "failing": [
+        "REQ-0003",
+        "REQ-0012",
+        "REQ-0013",
+        "REQ-0015",
+        "REQ-0031",
+        "REQ-0047",
+        "REQ-0069",
+        "REQ-0084",
+        "REQ-0116"
+      ],
+      "abstaining": [
+        "REQ-0001",
+        "REQ-0002",
+        "REQ-0008",
+        "REQ-0046",
+        "REQ-0058",
+        "REQ-0067",
+        "REQ-0068",
+        "REQ-0077",
+        "REQ-0086",
+        "REQ-0091",
+        "REQ-0096",
+        "REQ-0100"
+      ],
+      "rtl_lines": 269,
+      "editor_trials_used": 6
+    },
+    {
+      "round": 2,
+      "requirements": 98,
+      "pass": 80,
+      "fail": 6,
+      "abstain": 12,
+      "failing_check_instances": 178,
+      "failing": [
+        "REQ-0003",
+        "REQ-0015",
+        "REQ-0031",
+        "REQ-0047",
+        "REQ-0084",
+        "REQ-0116"
+      ],
+      "abstaining": [
+        "REQ-0001",
+        "REQ-0002",
+        "REQ-0008",
+        "REQ-0046",
+        "REQ-0058",
+        "REQ-0067",
+        "REQ-0068",
+        "REQ-0077",
+        "REQ-0086",
+        "REQ-0091",
+        "REQ-0096",
+        "REQ-0100"
+      ],
+      "rtl_lines": 268,
+      "editor_trials_used": 3
+    },
+    {
+      "round": 3,
+      "requirements": 98,
+      "pass": 80,
+      "fail": 6,
+      "abstain": 12,
+      "failing_check_instances": 178,
+      "failing": [
+        "REQ-0003",
+        "REQ-0015",
+        "REQ-0031",
+        "REQ-0047",
+        "REQ-0084",
+        "REQ-0116"
+      ],
+      "abstaining": [
+        "REQ-0001",
+        "REQ-0002",
+        "REQ-0008",
+        "REQ-0046",
+        "REQ-0058",
+        "REQ-0067",
+        "REQ-0068",
+        "REQ-0077",
+        "REQ-0086",
+        "REQ-0091",
+        "REQ-0096",
+        "REQ-0100"
+      ],
+      "rtl_lines": 268
+    }
+  ],
+  "final": {
+    "round": 3,
+    "requirements": 98,
+    "pass": 80,
+    "fail": 6,
+    "abstain": 12,
+    "failing_check_instances": 178,
+    "failing": [
+      "REQ-0003",
+      "REQ-0015",
+      "REQ-0031",
+      "REQ-0047",
+      "REQ-0084",
+      "REQ-0116"
+    ],
+    "abstaining": [
+      "REQ-0001",
+      "REQ-0002",
+      "REQ-0008",
+      "REQ-0046",
+      "REQ-0058",
+      "REQ-0067",
+      "REQ-0068",
+      "REQ-0077",
+      "REQ-0086",
+      "REQ-0091",
+      "REQ-0096",
+      "REQ-0100"
+    ],
+    "rtl_lines": 268
+  },
+  "usage": {
+    "input": 47571480,
+    "cached": 42420605,
+    "output": 424999,
+    "reasoning": 0,
+    "calls": 330,
+    "cache_hit_rate": 0.8917
+  }
+}

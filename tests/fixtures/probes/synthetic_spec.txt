@@ -1,0 +1,21 @@
+# Synthetic cache controller -- a fixture, not a real design
+
+The controller idles until a request arrives.
+
+REQ-A. On a request with a tag miss, the controller enters the LREFILL3 state
+and asserts burst.
+
+REQ-B. While in the line-refill state, the controller must not accept a second
+request.
+
+REQ-C. The controller leaves the state it occupies while the cache line is
+being refilled once the fourth word has been acknowledged.
+
+REQ-D. The store-refill path is present only when OR1200_DC_STORE_REFILL is
+defined; on this build it is absent.
+
+REQ-E. The write-back buffer holds the address most recently accepted, and this
+address appears on saved_addr.
+
+REQ-F. The controller supports a delayed-write mode governed by
+OR1200_DC_WRITETHROUGH, whose behaviour is described elsewhere.

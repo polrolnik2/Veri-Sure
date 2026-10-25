@@ -1,0 +1,495 @@
+{
+ "golden_vs_gB": {
+  "dout": 126965
+ },
+ "gB_vs_gC": {
+  "cmd_ack": 1206,
+  "busy": 7910,
+  "al": 458,
+  "dout": 99720,
+  "scl_oen": 27517,
+  "sda_oen": 13823
+ },
+ "designs": {
+  "luna12 start": {
+   "golden": [
+    0.1844662028740863,
+    0.032044198895027624
+   ],
+   "gB": [
+    0.5528915651267451,
+    0.15856353591160222
+   ],
+   "gC": [
+    0.8349967089412869,
+    0.3756906077348066
+   ]
+  },
+  "luna12 peer gen1": {
+   "golden": [
+    0.1695477864874483,
+    0.019337016574585635
+   ],
+   "gB": [
+    0.5079064142576851,
+    0.09226519337016574
+   ],
+   "gC": [
+    0.740796845622577,
+    0.2110497237569061
+   ]
+  },
+  "luna12 peer gen2": {
+   "golden": [
+    0.18832414251386495,
+    0.036464088397790057
+   ],
+   "gB": [
+    0.5541670472117332,
+    0.17403314917127072
+   ],
+   "gC": [
+    0.816399865208313,
+    0.438121546961326
+   ]
+  },
+  "luna12 peer gen3": {
+   "golden": [
+    0.17527013450824655,
+    0.022099447513812154
+   ],
+   "gB": [
+    0.5151593407804691,
+    0.10441988950276243
+   ],
+   "gC": [
+    0.7661458710597839,
+    0.2265193370165746
+   ]
+  }
+ },
+ "audited": [
+  {
+   "arm": "cf-checks",
+   "job": "bit_ctrl luna12",
+   "commit": 1,
+   "dcons": -0.047198222300191515,
+   "latched": true,
+   "golden": -11092,
+   "gB": -11092,
+   "gC": -17748
+  },
+  {
+   "arm": "cf-checks",
+   "job": "bit_ctrl luna12",
+   "commit": 2,
+   "dcons": 0.0,
+   "latched": false,
+   "golden": 0,
+   "gB": 0,
+   "gC": 0
+  },
+  {
+   "arm": "cf-checks",
+   "job": "bit_ctrl luna12",
+   "commit": 3,
+   "dcons": 0.03568191453591215,
+   "latched": false,
+   "golden": 9604,
+   "gB": 9604,
+   "gC": 15256
+  },
+  {
+   "arm": "cf-checks",
+   "job": "bit_ctrl luna12",
+   "commit": 4,
+   "dcons": 0.034369837580223085,
+   "latched": false,
+   "golden": 8376,
+   "gB": 8376,
+   "gC": 13876
+  },
+  {
+   "arm": "cf-checks",
+   "job": "bit_ctrl luna12",
+   "commit": 5,
+   "dcons": 0.0,
+   "latched": false,
+   "golden": 0,
+   "gB": 0,
+   "gC": 0
+  },
+  {
+   "arm": "cf-checks",
+   "job": "bit_ctrl luna12",
+   "commit": 6,
+   "dcons": 0.03568191453591215,
+   "latched": false,
+   "golden": 9604,
+   "gB": 9604,
+   "gC": 15256
+  },
+  {
+   "arm": "cf-checks",
+   "job": "bit_ctrl luna12",
+   "commit": 7,
+   "dcons": -0.07021987339736557,
+   "latched": true,
+   "golden": -5376,
+   "gB": -5376,
+   "gC": -17350
+  },
+  {
+   "arm": "cf-checks",
+   "job": "bit_ctrl luna12",
+   "commit": 8,
+   "dcons": 0.07034779176351913,
+   "latched": false,
+   "golden": 5242,
+   "gB": 5242,
+   "gC": 17232
+  },
+  {
+   "arm": "cf-checks",
+   "job": "bit_ctrl luna12",
+   "commit": 9,
+   "dcons": 0.01474716021227133,
+   "latched": false,
+   "golden": 1291,
+   "gB": 1291,
+   "gC": 1803
+  },
+  {
+   "arm": "cf-checks",
+   "job": "bit_ctrl luna12",
+   "commit": 10,
+   "dcons": 0.0,
+   "latched": false,
+   "golden": 0,
+   "gB": 0,
+   "gC": 0
+  },
+  {
+   "arm": "cf-checks",
+   "job": "bit_ctrl luna12",
+   "commit": 11,
+   "dcons": 0.05857564726693273,
+   "latched": false,
+   "golden": 9796,
+   "gB": 9796,
+   "gC": 21764
+  },
+  {
+   "arm": "cf-checks",
+   "job": "bit_ctrl luna12",
+   "commit": 12,
+   "dcons": -0.012579857608584452,
+   "latched": true,
+   "golden": 9608,
+   "gB": 9608,
+   "gC": 9576
+  },
+  {
+   "arm": "cf-checks",
+   "job": "bit_ctrl luna12",
+   "commit": 13,
+   "dcons": -0.00559916962706312,
+   "latched": false,
+   "golden": 528,
+   "gB": 528,
+   "gC": 540
+  },
+  {
+   "arm": "cf-checks",
+   "job": "bit_ctrl luna12",
+   "commit": 14,
+   "dcons": 0.006955104308290568,
+   "latched": false,
+   "golden": -9078,
+   "gB": -9078,
+   "gC": -9034
+  },
+  {
+   "arm": "cf-checks",
+   "job": "bit_ctrl luna12",
+   "commit": 15,
+   "dcons": 0.06973743841644375,
+   "latched": false,
+   "golden": 2639,
+   "gB": 2639,
+   "gC": 14629
+  },
+  {
+   "arm": "cf-checks",
+   "job": "bit_ctrl luna12",
+   "commit": 16,
+   "dcons": 7.675101969210434e-05,
+   "latched": true,
+   "golden": -15,
+   "gB": -15,
+   "gC": -11
+  },
+  {
+   "arm": "cf-checks",
+   "job": "bit_ctrl luna12",
+   "commit": 17,
+   "dcons": 0.0006505562621522687,
+   "latched": false,
+   "golden": 118,
+   "gB": 118,
+   "gC": 160
+  },
+  {
+   "arm": "cf-checks",
+   "job": "bit_ctrl luna12",
+   "commit": 18,
+   "dcons": -0.022115258102714752,
+   "latched": false,
+   "golden": -7262,
+   "gB": -7262,
+   "gC": -12524
+  },
+  {
+   "arm": "cf-model",
+   "job": "bit_ctrl luna12",
+   "commit": 1,
+   "dcons": -0.22981448182097275,
+   "latched": false,
+   "golden": -67347,
+   "gB": -67347,
+   "gC": -93719
+  },
+  {
+   "arm": "cf-model",
+   "job": "bit_ctrl luna12",
+   "commit": 2,
+   "dcons": -0.24255149627940295,
+   "latched": false,
+   "golden": -82537,
+   "gB": -82537,
+   "gC": -108575
+  },
+  {
+   "arm": "cf-model",
+   "job": "bit_ctrl luna12",
+   "commit": 3,
+   "dcons": -0.24264652135140272,
+   "latched": false,
+   "golden": -82573,
+   "gB": -82573,
+   "gC": -108615
+  },
+  {
+   "arm": "cf-model",
+   "job": "bit_ctrl luna12",
+   "commit": 4,
+   "dcons": -0.15652822244638387,
+   "latched": false,
+   "golden": -50255,
+   "gB": -50255,
+   "gC": -77619
+  },
+  {
+   "arm": "cf-model",
+   "job": "bit_ctrl luna12",
+   "commit": 5,
+   "dcons": -0.16021592620206715,
+   "latched": false,
+   "golden": -50865,
+   "gB": -50865,
+   "gC": -78731
+  },
+  {
+   "arm": "cf-model",
+   "job": "bit_ctrl luna12",
+   "commit": 6,
+   "dcons": -0.03254608715991988,
+   "latched": true,
+   "golden": -14726,
+   "gB": -14726,
+   "gC": -21280
+  },
+  {
+   "arm": "cf-model",
+   "job": "bit_ctrl luna12",
+   "commit": 7,
+   "dcons": -0.1939461719515226,
+   "latched": false,
+   "golden": -51700,
+   "gB": -51700,
+   "gC": -71192
+  },
+  {
+   "arm": "cf-model",
+   "job": "bit_ctrl luna12",
+   "commit": 8,
+   "dcons": -0.1939461719515226,
+   "latched": false,
+   "golden": -51700,
+   "gB": -51700,
+   "gC": -71192
+  },
+  {
+   "arm": "cf-model",
+   "job": "bit_ctrl luna12",
+   "commit": 9,
+   "dcons": -0.015218630761808702,
+   "latched": true,
+   "golden": -1993,
+   "gB": -1993,
+   "gC": -2001
+  },
+  {
+   "arm": "cf-model",
+   "job": "bit_ctrl luna12",
+   "commit": 10,
+   "dcons": 0.008965250062131816,
+   "latched": false,
+   "golden": 2857,
+   "gB": 2857,
+   "gC": 2961
+  },
+  {
+   "arm": "cf-model",
+   "job": "bit_ctrl luna12",
+   "commit": 11,
+   "dcons": 0.0,
+   "latched": false,
+   "golden": 0,
+   "gB": 0,
+   "gC": 0
+  },
+  {
+   "arm": "cf-model",
+   "job": "bit_ctrl luna12",
+   "commit": 12,
+   "dcons": 0.008965250062131816,
+   "latched": false,
+   "golden": 2857,
+   "gB": 2857,
+   "gC": 2961
+  },
+  {
+   "arm": "cf-model",
+   "job": "bit_ctrl luna12",
+   "commit": 13,
+   "dcons": 0.008965250062131816,
+   "latched": false,
+   "golden": 2857,
+   "gB": 2857,
+   "gC": 2961
+  },
+  {
+   "arm": "cf-model",
+   "job": "bit_ctrl luna12",
+   "commit": 14,
+   "dcons": -0.0065896232621375965,
+   "latched": false,
+   "golden": 635,
+   "gB": 635,
+   "gC": 735
+  },
+  {
+   "arm": "cf-model",
+   "job": "bit_ctrl luna12",
+   "commit": 15,
+   "dcons": -0.18204976389924418,
+   "latched": false,
+   "golden": -50628,
+   "gB": -50628,
+   "gC": -70438
+  },
+  {
+   "arm": "cf-model",
+   "job": "bit_ctrl luna12",
+   "commit": 16,
+   "dcons": -0.18204976389924418,
+   "latched": false,
+   "golden": -50628,
+   "gB": -50628,
+   "gC": -70438
+  },
+  {
+   "arm": "cf-model",
+   "job": "bit_ctrl luna12",
+   "commit": 17,
+   "dcons": -0.1787275411897139,
+   "latched": false,
+   "golden": -49707,
+   "gB": -49707,
+   "gC": -69191
+  }
+ ],
+ "audited_direction_flips": 0,
+ "judged": [
+  {
+   "source": "cf-checks bit_ctrl luna12 commit 12",
+   "score": 0.14814814814814814,
+   "golden": 9608,
+   "gB": 9608,
+   "gC": 9576
+  },
+  {
+   "source": "cf-checks bit_ctrl luna12 commit 16",
+   "score": -0.6142857142857143,
+   "golden": -15,
+   "gB": -15,
+   "gC": -11
+  },
+  {
+   "source": "cf-model bit_ctrl luna12 commit 9",
+   "score": -0.5652173913043478,
+   "golden": -1993,
+   "gB": -1993,
+   "gC": -2001
+  },
+  {
+   "source": "live smokem6-cons-fv-arb commit 1",
+   "score": 0.25555555555555554,
+   "latched": true,
+   "golden": -4068,
+   "gB": -4068,
+   "gC": -7048
+  },
+  {
+   "source": "live smokem6-cons-fv commit 1",
+   "score": null,
+   "latched": false,
+   "golden": -10306,
+   "gB": -10306,
+   "gC": -16154
+  },
+  {
+   "source": "live smokem6-cons-fv commit 2",
+   "score": null,
+   "latched": false,
+   "golden": -2275,
+   "gB": -2275,
+   "gC": -3677
+  },
+  {
+   "source": "live smokem6-cons-fv commit 3",
+   "score": null,
+   "latched": false,
+   "golden": -1899,
+   "gB": -1899,
+   "gC": -3299
+  },
+  {
+   "source": "live smokem6-cons-fv commit 4",
+   "score": null,
+   "latched": false,
+   "golden": -2202,
+   "gB": -2202,
+   "gC": -3592
+  },
+  {
+   "source": "live smokem6-cons-fv commit 5",
+   "score": null,
+   "latched": false,
+   "golden": -1899,
+   "gB": -1899,
+   "gC": -3299
+  }
+ ]
+}

@@ -1,0 +1,3963 @@
+{
+ "jobs": [
+  {
+   "module": "i2c_master_bit_ctrl",
+   "run": "luna12",
+   "commits": [
+    {
+     "commit": 1,
+     "latched": false,
+     "requirements": {
+      "passing": "77 -> 76",
+      "failing": "11 -> 12",
+      "uncovered": "15 -> 15",
+      "repaired": [
+       "REQ-0025",
+       "REQ-0029",
+       "REQ-0088",
+       "REQ-0131",
+       "REQ-0137"
+      ],
+      "broken": [
+       "REQ-0007",
+       "REQ-0055",
+       "REQ-0086",
+       "REQ-0104",
+       "REQ-0118",
+       "REQ-0136"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.1844662028740863,
+     "edge_after": 0.15621978603394357,
+     "tp_before": 0.032044198895027624,
+     "tp_after": 0.018232044198895028,
+     "cells_fixed": 33255,
+     "cells_broken": 100602,
+     "port_fixed": {
+      "scl_oen": 22936,
+      "cmd_ack": 1100,
+      "sda_oen": 7946,
+      "al": 1273
+     },
+     "port_broken": {
+      "cmd_ack": 1568,
+      "sda_oen": 28740,
+      "scl_oen": 68258,
+      "al": 2036
+     },
+     "own": {
+      "edge_before": 0.15474102013069602,
+      "edge_after": 0.12771369676768562,
+      "cells_fixed": 9870,
+      "cells_broken": 33669
+     }
+    },
+    {
+     "commit": 2,
+     "latched": false,
+     "requirements": {
+      "passing": "77 -> 76",
+      "failing": "11 -> 12",
+      "uncovered": "15 -> 15",
+      "repaired": [
+       "REQ-0025",
+       "REQ-0029",
+       "REQ-0088",
+       "REQ-0131",
+       "REQ-0137"
+      ],
+      "broken": [
+       "REQ-0007",
+       "REQ-0055",
+       "REQ-0086",
+       "REQ-0104",
+       "REQ-0118",
+       "REQ-0136"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.1844662028740863,
+     "edge_after": 0.1537066139257449,
+     "tp_before": 0.032044198895027624,
+     "tp_after": 0.018232044198895028,
+     "cells_fixed": 33990,
+     "cells_broken": 116527,
+     "port_fixed": {
+      "scl_oen": 23770,
+      "cmd_ack": 1067,
+      "sda_oen": 7880,
+      "al": 1273
+     },
+     "port_broken": {
+      "scl_oen": 78333,
+      "sda_oen": 34559,
+      "cmd_ack": 1606,
+      "al": 2029
+     },
+     "own": {
+      "edge_before": 0.15474102013069602,
+      "edge_after": 0.12879917547475989,
+      "cells_fixed": 9892,
+      "cells_broken": 34913
+     }
+    },
+    {
+     "commit": 3,
+     "latched": false,
+     "requirements": {
+      "passing": "77 -> 75",
+      "failing": "11 -> 13",
+      "uncovered": "15 -> 15",
+      "repaired": [
+       "REQ-0025",
+       "REQ-0029",
+       "REQ-0088",
+       "REQ-0123",
+       "REQ-0131",
+       "REQ-0137"
+      ],
+      "broken": [
+       "REQ-0002",
+       "REQ-0007",
+       "REQ-0019",
+       "REQ-0055",
+       "REQ-0086",
+       "REQ-0104",
+       "REQ-0118",
+       "REQ-0136"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.1844662028740863,
+     "edge_after": 0.1537066139257449,
+     "tp_before": 0.032044198895027624,
+     "tp_after": 0.018232044198895028,
+     "cells_fixed": 33983,
+     "cells_broken": 116556,
+     "port_fixed": {
+      "scl_oen": 23770,
+      "cmd_ack": 1067,
+      "sda_oen": 7873,
+      "al": 1273
+     },
+     "port_broken": {
+      "scl_oen": 78333,
+      "sda_oen": 34588,
+      "cmd_ack": 1606,
+      "al": 2029
+     },
+     "own": {
+      "edge_before": 0.15474102013069602,
+      "edge_after": 0.12879917547475989,
+      "cells_fixed": 9883,
+      "cells_broken": 34933
+     }
+    },
+    {
+     "commit": 4,
+     "latched": false,
+     "requirements": {
+      "passing": "77 -> 76",
+      "failing": "11 -> 12",
+      "uncovered": "15 -> 15",
+      "repaired": [
+       "REQ-0025",
+       "REQ-0029",
+       "REQ-0088",
+       "REQ-0123",
+       "REQ-0131",
+       "REQ-0137"
+      ],
+      "broken": [
+       "REQ-0002",
+       "REQ-0007",
+       "REQ-0055",
+       "REQ-0086",
+       "REQ-0104",
+       "REQ-0118",
+       "REQ-0136"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.1844662028740863,
+     "edge_after": 0.16483637611919616,
+     "tp_before": 0.032044198895027624,
+     "tp_after": 0.019337016574585635,
+     "cells_fixed": 32383,
+     "cells_broken": 82638,
+     "port_fixed": {
+      "scl_oen": 22549,
+      "cmd_ack": 1093,
+      "sda_oen": 7470,
+      "al": 1271
+     },
+     "port_broken": {
+      "sda_oen": 19988,
+      "cmd_ack": 1499,
+      "scl_oen": 59117,
+      "al": 2034
+     },
+     "own": {
+      "edge_before": 0.15474102013069602,
+      "edge_after": 0.13929213630981097,
+      "cells_fixed": 9631,
+      "cells_broken": 25404
+     }
+    },
+    {
+     "commit": 5,
+     "latched": false,
+     "requirements": {
+      "passing": "77 -> 75",
+      "failing": "11 -> 13",
+      "uncovered": "15 -> 15",
+      "repaired": [
+       "REQ-0025",
+       "REQ-0029",
+       "REQ-0088",
+       "REQ-0123",
+       "REQ-0131",
+       "REQ-0137"
+      ],
+      "broken": [
+       "REQ-0002",
+       "REQ-0007",
+       "REQ-0055",
+       "REQ-0061",
+       "REQ-0086",
+       "REQ-0104",
+       "REQ-0118",
+       "REQ-0136"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.1844662028740863,
+     "edge_after": 0.16307274656958307,
+     "tp_before": 0.032044198895027624,
+     "tp_after": 0.019337016574585635,
+     "cells_fixed": 32709,
+     "cells_broken": 83574,
+     "port_fixed": {
+      "scl_oen": 22807,
+      "cmd_ack": 1100,
+      "sda_oen": 7529,
+      "al": 1273
+     },
+     "port_broken": {
+      "cmd_ack": 1557,
+      "sda_oen": 20176,
+      "scl_oen": 59805,
+      "al": 2036
+     },
+     "own": {
+      "edge_before": 0.15474102013069602,
+      "edge_after": 0.13887548791719662,
+      "cells_fixed": 9796,
+      "cells_broken": 25585
+     }
+    },
+    {
+     "commit": 6,
+     "latched": true,
+     "requirements": {
+      "passing": "77 -> 80",
+      "failing": "11 -> 8",
+      "uncovered": "15 -> 15",
+      "repaired": [
+       "REQ-0025",
+       "REQ-0029",
+       "REQ-0088",
+       "REQ-0137"
+      ],
+      "broken": [
+       "REQ-0076"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.1844662028740863,
+     "edge_after": 0.1779344748635549,
+     "tp_before": 0.032044198895027624,
+     "tp_after": 0.020994475138121547,
+     "cells_fixed": 6050,
+     "cells_broken": 20776,
+     "port_fixed": {
+      "sda_oen": 2082,
+      "scl_oen": 3953,
+      "cmd_ack": 13,
+      "al": 2
+     },
+     "port_broken": {
+      "scl_oen": 15239,
+      "sda_oen": 5502,
+      "cmd_ack": 17,
+      "al": 18
+     },
+     "own": {
+      "edge_before": 0.15474102013069602,
+      "edge_after": 0.1522082364808561,
+      "cells_fixed": 2385,
+      "cells_broken": 6917
+     }
+    },
+    {
+     "commit": 7,
+     "latched": false,
+     "requirements": {
+      "passing": "80 -> 76",
+      "failing": "8 -> 12",
+      "uncovered": "15 -> 15",
+      "repaired": [
+       "REQ-0076",
+       "REQ-0123",
+       "REQ-0131"
+      ],
+      "broken": [
+       "REQ-0002",
+       "REQ-0007",
+       "REQ-0055",
+       "REQ-0086",
+       "REQ-0104",
+       "REQ-0118",
+       "REQ-0136"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.1779344748635549,
+     "edge_after": 0.15866682203403176,
+     "tp_before": 0.020994475138121547,
+     "tp_after": 0.018232044198895028,
+     "cells_fixed": 30903,
+     "cells_broken": 82603,
+     "port_fixed": {
+      "scl_oen": 20598,
+      "sda_oen": 7942,
+      "cmd_ack": 1094,
+      "al": 1269
+     },
+     "port_broken": {
+      "sda_oen": 25037,
+      "scl_oen": 54043,
+      "cmd_ack": 1507,
+      "al": 2016
+     },
+     "own": {
+      "edge_before": 0.1522082364808561,
+      "edge_after": 0.12958861453445025,
+      "cells_fixed": 8833,
+      "cells_broken": 27976
+     }
+    },
+    {
+     "commit": 8,
+     "latched": false,
+     "requirements": {
+      "passing": "80 -> 76",
+      "failing": "8 -> 12",
+      "uncovered": "15 -> 15",
+      "repaired": [
+       "REQ-0076",
+       "REQ-0123",
+       "REQ-0131"
+      ],
+      "broken": [
+       "REQ-0002",
+       "REQ-0007",
+       "REQ-0055",
+       "REQ-0086",
+       "REQ-0104",
+       "REQ-0118",
+       "REQ-0136"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.1779344748635549,
+     "edge_after": 0.15866682203403176,
+     "tp_before": 0.020994475138121547,
+     "tp_after": 0.018232044198895028,
+     "cells_fixed": 30903,
+     "cells_broken": 82603,
+     "port_fixed": {
+      "scl_oen": 20598,
+      "sda_oen": 7942,
+      "cmd_ack": 1094,
+      "al": 1269
+     },
+     "port_broken": {
+      "sda_oen": 25037,
+      "scl_oen": 54043,
+      "cmd_ack": 1507,
+      "al": 2016
+     },
+     "own": {
+      "edge_before": 0.1522082364808561,
+      "edge_after": 0.12958861453445025,
+      "cells_fixed": 8833,
+      "cells_broken": 27976
+     }
+    },
+    {
+     "commit": 9,
+     "latched": true,
+     "requirements": {
+      "passing": "80 -> 81",
+      "failing": "8 -> 7",
+      "uncovered": "15 -> 15",
+      "repaired": [
+       "REQ-0131"
+      ],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.1779344748635549,
+     "edge_after": 0.17614250126760875,
+     "tp_before": 0.020994475138121547,
+     "tp_after": 0.020994475138121547,
+     "cells_fixed": 4188,
+     "cells_broken": 6181,
+     "port_fixed": {
+      "scl_oen": 2192,
+      "sda_oen": 1683,
+      "cmd_ack": 309,
+      "al": 4
+     },
+     "port_broken": {
+      "scl_oen": 4505,
+      "cmd_ack": 173,
+      "sda_oen": 1501,
+      "al": 2
+     },
+     "own": {
+      "edge_before": 0.1522082364808561,
+      "edge_after": 0.15227402306916363,
+      "cells_fixed": 351,
+      "cells_broken": 1681
+     }
+    },
+    {
+     "commit": 10,
+     "latched": false,
+     "requirements": {
+      "passing": "81 -> 81",
+      "failing": "7 -> 7",
+      "uncovered": "15 -> 15",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.17614250126760875,
+     "edge_after": 0.17971385110557528,
+     "tp_before": 0.020994475138121547,
+     "tp_after": 0.020994475138121547,
+     "cells_fixed": 7864,
+     "cells_broken": 5007,
+     "port_fixed": {
+      "scl_oen": 5726,
+      "sda_oen": 1838,
+      "cmd_ack": 129,
+      "al": 171
+     },
+     "port_broken": {
+      "scl_oen": 3060,
+      "sda_oen": 1711,
+      "cmd_ack": 228,
+      "al": 8
+     },
+     "own": {
+      "edge_before": 0.15227402306916363,
+      "edge_after": 0.15141879742116574,
+      "cells_fixed": 1886,
+      "cells_broken": 619
+     }
+    },
+    {
+     "commit": 11,
+     "latched": false,
+     "requirements": {
+      "passing": "81 -> 81",
+      "failing": "7 -> 7",
+      "uncovered": "15 -> 15",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.17614250126760875,
+     "edge_after": 0.17614250126760875,
+     "tp_before": 0.020994475138121547,
+     "tp_after": 0.020994475138121547,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.15227402306916363,
+      "edge_after": 0.15227402306916363,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 12,
+     "latched": false,
+     "requirements": {
+      "passing": "81 -> 81",
+      "failing": "7 -> 7",
+      "uncovered": "15 -> 15",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.17614250126760875,
+     "edge_after": 0.17971385110557528,
+     "tp_before": 0.020994475138121547,
+     "tp_after": 0.020994475138121547,
+     "cells_fixed": 7864,
+     "cells_broken": 5007,
+     "port_fixed": {
+      "scl_oen": 5726,
+      "sda_oen": 1838,
+      "cmd_ack": 129,
+      "al": 171
+     },
+     "port_broken": {
+      "scl_oen": 3060,
+      "sda_oen": 1711,
+      "cmd_ack": 228,
+      "al": 8
+     },
+     "own": {
+      "edge_before": 0.15227402306916363,
+      "edge_after": 0.15141879742116574,
+      "cells_fixed": 1886,
+      "cells_broken": 619
+     }
+    },
+    {
+     "commit": 13,
+     "latched": false,
+     "requirements": {
+      "passing": "81 -> 81",
+      "failing": "7 -> 7",
+      "uncovered": "15 -> 15",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.17614250126760875,
+     "edge_after": 0.17971385110557528,
+     "tp_before": 0.020994475138121547,
+     "tp_after": 0.020994475138121547,
+     "cells_fixed": 7864,
+     "cells_broken": 5007,
+     "port_fixed": {
+      "scl_oen": 5726,
+      "sda_oen": 1838,
+      "cmd_ack": 129,
+      "al": 171
+     },
+     "port_broken": {
+      "scl_oen": 3060,
+      "sda_oen": 1711,
+      "cmd_ack": 228,
+      "al": 8
+     },
+     "own": {
+      "edge_before": 0.15227402306916363,
+      "edge_after": 0.15141879742116574,
+      "cells_fixed": 1886,
+      "cells_broken": 619
+     }
+    },
+    {
+     "commit": 14,
+     "latched": false,
+     "requirements": {
+      "passing": "81 -> 81",
+      "failing": "7 -> 7",
+      "uncovered": "15 -> 15",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.17614250126760875,
+     "edge_after": 0.1772605164285242,
+     "tp_before": 0.020994475138121547,
+     "tp_after": 0.020994475138121547,
+     "cells_fixed": 1737,
+     "cells_broken": 1102,
+     "port_fixed": {
+      "sda_oen": 343,
+      "scl_oen": 1171,
+      "cmd_ack": 54,
+      "al": 169
+     },
+     "port_broken": {
+      "scl_oen": 990,
+      "cmd_ack": 60,
+      "sda_oen": 46,
+      "al": 6
+     },
+     "own": {
+      "edge_before": 0.15227402306916363,
+      "edge_after": 0.15082671812639797,
+      "cells_fixed": 296,
+      "cells_broken": 431
+     }
+    },
+    {
+     "commit": 15,
+     "latched": false,
+     "requirements": {
+      "passing": "81 -> 76",
+      "failing": "7 -> 12",
+      "uncovered": "15 -> 15",
+      "repaired": [
+       "REQ-0076"
+      ],
+      "broken": [
+       "REQ-0007",
+       "REQ-0055",
+       "REQ-0086",
+       "REQ-0104",
+       "REQ-0118",
+       "REQ-0136"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.17614250126760875,
+     "edge_after": 0.15621978603394357,
+     "tp_before": 0.020994475138121547,
+     "tp_after": 0.018232044198895028,
+     "cells_fixed": 35902,
+     "cells_broken": 86530,
+     "port_fixed": {
+      "scl_oen": 25026,
+      "cmd_ack": 1024,
+      "sda_oen": 8580,
+      "al": 1272
+     },
+     "port_broken": {
+      "sda_oen": 26136,
+      "scl_oen": 56749,
+      "cmd_ack": 1624,
+      "al": 2021
+     },
+     "own": {
+      "edge_before": 0.15227402306916363,
+      "edge_after": 0.12771369676768562,
+      "cells_fixed": 10338,
+      "cells_broken": 28275
+     }
+    },
+    {
+     "commit": 16,
+     "latched": false,
+     "requirements": {
+      "passing": "81 -> 77",
+      "failing": "7 -> 11",
+      "uncovered": "15 -> 15",
+      "repaired": [
+       "REQ-0076",
+       "REQ-0123"
+      ],
+      "broken": [
+       "REQ-0007",
+       "REQ-0055",
+       "REQ-0086",
+       "REQ-0104",
+       "REQ-0118",
+       "REQ-0136"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.17614250126760875,
+     "edge_after": 0.15621978603394357,
+     "tp_before": 0.020994475138121547,
+     "tp_after": 0.018232044198895028,
+     "cells_fixed": 35902,
+     "cells_broken": 86530,
+     "port_fixed": {
+      "scl_oen": 25026,
+      "cmd_ack": 1024,
+      "sda_oen": 8580,
+      "al": 1272
+     },
+     "port_broken": {
+      "sda_oen": 26136,
+      "scl_oen": 56749,
+      "cmd_ack": 1624,
+      "al": 2021
+     },
+     "own": {
+      "edge_before": 0.15227402306916363,
+      "edge_after": 0.12771369676768562,
+      "cells_fixed": 10338,
+      "cells_broken": 28275
+     }
+    },
+    {
+     "commit": 17,
+     "latched": false,
+     "requirements": {
+      "passing": "81 -> 76",
+      "failing": "7 -> 12",
+      "uncovered": "15 -> 15",
+      "repaired": [
+       "REQ-0076",
+       "REQ-0123"
+      ],
+      "broken": [
+       "REQ-0002",
+       "REQ-0007",
+       "REQ-0055",
+       "REQ-0086",
+       "REQ-0104",
+       "REQ-0118",
+       "REQ-0136"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.17614250126760875,
+     "edge_after": 0.15866682203403176,
+     "tp_before": 0.020994475138121547,
+     "tp_after": 0.018232044198895028,
+     "cells_fixed": 35241,
+     "cells_broken": 84948,
+     "port_fixed": {
+      "scl_oen": 24388,
+      "cmd_ack": 1023,
+      "sda_oen": 8560,
+      "al": 1270
+     },
+     "port_broken": {
+      "cmd_ack": 1572,
+      "sda_oen": 25837,
+      "scl_oen": 55520,
+      "al": 2019
+     },
+     "own": {
+      "edge_before": 0.15227402306916363,
+      "edge_after": 0.12958861453445025,
+      "cells_fixed": 10107,
+      "cells_broken": 27920
+     }
+    }
+   ]
+  },
+  {
+   "module": "i2c_master_byte_ctrl",
+   "run": "luna12",
+   "commits": [
+    {
+     "commit": 1,
+     "latched": false,
+     "requirements": {
+      "passing": "52 -> 52",
+      "failing": "25 -> 25",
+      "uncovered": "11 -> 11",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4271464412481647,
+     "edge_after": 0.4271464412481647,
+     "tp_before": 0.2704598597038192,
+     "tp_after": 0.2704598597038192,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.4323847094187193,
+      "edge_after": 0.4323847094187193,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 2,
+     "latched": false,
+     "requirements": {
+      "passing": "52 -> 52",
+      "failing": "25 -> 25",
+      "uncovered": "11 -> 11",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4271464412481647,
+     "edge_after": 0.4271464412481647,
+     "tp_before": 0.2704598597038192,
+     "tp_after": 0.2704598597038192,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.4323847094187193,
+      "edge_after": 0.4323847094187193,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 3,
+     "latched": false,
+     "requirements": {
+      "passing": "52 -> 52",
+      "failing": "25 -> 25",
+      "uncovered": "11 -> 11",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4271464412481647,
+     "edge_after": 0.4271464412481647,
+     "tp_before": 0.2704598597038192,
+     "tp_after": 0.2704598597038192,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.4323847094187193,
+      "edge_after": 0.4323847094187193,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 4,
+     "latched": true,
+     "requirements": {
+      "passing": "52 -> 52",
+      "failing": "25 -> 25",
+      "uncovered": "11 -> 11",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4271464412481647,
+     "edge_after": 0.1996924491454149,
+     "tp_before": 0.2704598597038192,
+     "tp_after": 0.19875292283710055,
+     "cells_fixed": 191525,
+     "cells_broken": 766634,
+     "port_fixed": {
+      "sda_oen": 82535,
+      "ack_out": 46742,
+      "dout": 38315,
+      "cmd_ack": 1216,
+      "scl_oen": 21242,
+      "i2c_al": 1475
+     },
+     "port_broken": {
+      "dout": 288573,
+      "scl_oen": 116168,
+      "sda_oen": 62841,
+      "cmd_ack": 5595,
+      "ack_out": 292844,
+      "i2c_al": 613
+     },
+     "own": {
+      "edge_before": 0.4323847094187193,
+      "edge_after": 0.26500445867019423,
+      "cells_fixed": 53712,
+      "cells_broken": 193241
+     }
+    },
+    {
+     "commit": 5,
+     "latched": true,
+     "requirements": {
+      "passing": "52 -> 55",
+      "failing": "25 -> 20",
+      "uncovered": "11 -> 13",
+      "repaired": [
+       "REQ-0002",
+       "REQ-0008",
+       "REQ-0032",
+       "REQ-0053",
+       "REQ-0108",
+       "REQ-0119"
+      ],
+      "broken": [
+       "REQ-0049",
+       "REQ-0097"
+      ],
+      "silenced": [
+       "REQ-0076"
+      ],
+      "went_dark_from_passing": [
+       "REQ-0089"
+      ]
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.1996924491454149,
+     "edge_after": 0.4055608615700418,
+     "tp_before": 0.19875292283710055,
+     "tp_after": 0.2704598597038192,
+     "cells_fixed": 713436,
+     "cells_broken": 200578,
+     "port_fixed": {
+      "dout": 255211,
+      "scl_oen": 116168,
+      "sda_oen": 62841,
+      "cmd_ack": 5595,
+      "ack_out": 273008,
+      "i2c_al": 613
+     },
+     "port_broken": {
+      "sda_oen": 82535,
+      "ack_out": 53206,
+      "dout": 40904,
+      "cmd_ack": 1216,
+      "scl_oen": 21242,
+      "i2c_al": 1475
+     },
+     "own": {
+      "edge_before": 0.26500445867019423,
+      "edge_after": 0.41089450963486146,
+      "cells_fixed": 174143,
+      "cells_broken": 56566
+     }
+    },
+    {
+     "commit": 6,
+     "latched": true,
+     "requirements": {
+      "passing": "55 -> 62",
+      "failing": "20 -> 14",
+      "uncovered": "13 -> 12",
+      "repaired": [
+       "REQ-0003",
+       "REQ-0010",
+       "REQ-0050",
+       "REQ-0051",
+       "REQ-0097",
+       "REQ-0111",
+       "REQ-0115"
+      ],
+      "broken": [
+       "REQ-0095"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4055608615700418,
+     "edge_after": 0.29753317842938803,
+     "tp_before": 0.2704598597038192,
+     "tp_after": 0.19875292283710055,
+     "cells_fixed": 40908,
+     "cells_broken": 177988,
+     "port_fixed": {
+      "sda_oen": 6565,
+      "dout": 2646,
+      "ack_out": 27844,
+      "scl_oen": 3616,
+      "cmd_ack": 140,
+      "i2c_al": 97
+     },
+     "port_broken": {
+      "dout": 67824,
+      "sda_oen": 7373,
+      "i2c_al": 339,
+      "ack_out": 92141,
+      "scl_oen": 9424,
+      "cmd_ack": 887
+     },
+     "own": {
+      "edge_before": 0.41089450963486146,
+      "edge_after": 0.32906757690467897,
+      "cells_fixed": 9603,
+      "cells_broken": 40938
+     }
+    },
+    {
+     "commit": 7,
+     "latched": true,
+     "requirements": {
+      "passing": "62 -> 63",
+      "failing": "14 -> 13",
+      "uncovered": "12 -> 12",
+      "repaired": [
+       "REQ-0095"
+      ],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.29753317842938803,
+     "edge_after": 0.3468143718549985,
+     "tp_before": 0.19875292283710055,
+     "tp_after": 0.19875292283710055,
+     "cells_fixed": 87373,
+     "cells_broken": 25104,
+     "port_fixed": {
+      "ack_out": 87373
+     },
+     "port_broken": {
+      "ack_out": 25104
+     },
+     "own": {
+      "edge_before": 0.32906757690467897,
+      "edge_after": 0.3420774450343406,
+      "cells_fixed": 16977,
+      "cells_broken": 6403
+     }
+    },
+    {
+     "commit": 8,
+     "latched": false,
+     "requirements": {
+      "passing": "63 -> 63",
+      "failing": "13 -> 13",
+      "uncovered": "12 -> 12",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.3468143718549985,
+     "edge_after": 0.3468143718549985,
+     "tp_before": 0.19875292283710055,
+     "tp_after": 0.19875292283710055,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.3420774450343406,
+      "edge_after": 0.3420774450343406,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 9,
+     "latched": true,
+     "requirements": {
+      "passing": "63 -> 64",
+      "failing": "13 -> 12",
+      "uncovered": "12 -> 12",
+      "repaired": [
+       "REQ-0026"
+      ],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.3468143718549985,
+     "edge_after": 0.35842860401134696,
+     "tp_before": 0.19875292283710055,
+     "tp_after": 0.19875292283710055,
+     "cells_fixed": 15682,
+     "cells_broken": 4246,
+     "port_fixed": {
+      "sda_oen": 11406,
+      "ack_out": 2692,
+      "dout": 394,
+      "scl_oen": 1149,
+      "cmd_ack": 32,
+      "i2c_al": 9
+     },
+     "port_broken": {
+      "i2c_al": 257,
+      "sda_oen": 700,
+      "scl_oen": 1353,
+      "dout": 1355,
+      "cmd_ack": 35,
+      "ack_out": 546
+     },
+     "own": {
+      "edge_before": 0.3420774450343406,
+      "edge_after": 0.3482191894078532,
+      "cells_fixed": 5046,
+      "cells_broken": 2688
+     }
+    },
+    {
+     "commit": 10,
+     "latched": false,
+     "requirements": {
+      "passing": "64 -> 64",
+      "failing": "12 -> 12",
+      "uncovered": "12 -> 12",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.35842860401134696,
+     "edge_after": 0.350265855084033,
+     "tp_before": 0.19875292283710055,
+     "tp_after": 0.19875292283710055,
+     "cells_fixed": 4577,
+     "cells_broken": 47463,
+     "port_fixed": {
+      "ack_out": 4577
+     },
+     "port_broken": {
+      "ack_out": 47463
+     },
+     "own": {
+      "edge_before": 0.3482191894078532,
+      "edge_after": 0.3371581440120945,
+      "cells_fixed": 2221,
+      "cells_broken": 17565
+     }
+    },
+    {
+     "commit": 11,
+     "latched": true,
+     "requirements": {
+      "passing": "64 -> 70",
+      "failing": "12 -> 6",
+      "uncovered": "12 -> 12",
+      "repaired": [
+       "REQ-0012",
+       "REQ-0049",
+       "REQ-0060",
+       "REQ-0067",
+       "REQ-0069",
+       "REQ-0093",
+       "REQ-0094",
+       "REQ-0120"
+      ],
+      "broken": [
+       "REQ-0070",
+       "REQ-0100"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.35842860401134696,
+     "edge_after": 0.34980613248563813,
+     "tp_before": 0.19875292283710055,
+     "tp_after": 0.1979734996102884,
+     "cells_fixed": 26779,
+     "cells_broken": 74051,
+     "port_fixed": {
+      "cmd_ack": 707,
+      "sda_oen": 5585,
+      "scl_oen": 12367,
+      "dout": 4020,
+      "i2c_al": 723,
+      "ack_out": 3377
+     },
+     "port_broken": {
+      "ack_out": 49447,
+      "dout": 4882,
+      "scl_oen": 12165,
+      "sda_oen": 5229,
+      "cmd_ack": 1002,
+      "i2c_al": 1326
+     },
+     "own": {
+      "edge_before": 0.3482191894078532,
+      "edge_after": 0.3372112937230191,
+      "cells_fixed": 10032,
+      "cells_broken": 26867
+     }
+    },
+    {
+     "commit": 12,
+     "latched": false,
+     "requirements": {
+      "passing": "70 -> 64",
+      "failing": "6 -> 12",
+      "uncovered": "12 -> 12",
+      "repaired": [
+       "REQ-0070",
+       "REQ-0100"
+      ],
+      "broken": [
+       "REQ-0012",
+       "REQ-0049",
+       "REQ-0060",
+       "REQ-0067",
+       "REQ-0069",
+       "REQ-0093",
+       "REQ-0094",
+       "REQ-0120"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.34980613248563813,
+     "edge_after": 0.350265855084033,
+     "tp_before": 0.1979734996102884,
+     "tp_after": 0.19875292283710055,
+     "cells_fixed": 27989,
+     "cells_broken": 23603,
+     "port_fixed": {
+      "dout": 4882,
+      "scl_oen": 12165,
+      "sda_oen": 5229,
+      "cmd_ack": 1002,
+      "ack_out": 3385,
+      "i2c_al": 1326
+     },
+     "port_broken": {
+      "cmd_ack": 707,
+      "sda_oen": 5585,
+      "scl_oen": 12367,
+      "dout": 4020,
+      "i2c_al": 723,
+      "ack_out": 201
+     },
+     "own": {
+      "edge_before": 0.3372112937230191,
+      "edge_after": 0.3371581440120945,
+      "cells_fixed": 9787,
+      "cells_broken": 8296
+     }
+    },
+    {
+     "commit": 13,
+     "latched": false,
+     "requirements": {
+      "passing": "70 -> 70",
+      "failing": "6 -> 6",
+      "uncovered": "12 -> 12",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.34980613248563813,
+     "edge_after": 0.34980613248563813,
+     "tp_before": 0.1979734996102884,
+     "tp_after": 0.1979734996102884,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.3372112937230191,
+      "edge_after": 0.3372112937230191,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    }
+   ]
+  },
+  {
+   "module": "or1200_sb",
+   "run": "luna12",
+   "commits": [
+    {
+     "commit": 1,
+     "latched": true,
+     "requirements": {
+      "passing": "61 -> 62",
+      "failing": "3 -> 2",
+      "uncovered": "4 -> 4",
+      "repaired": [
+       "REQ-0020",
+       "REQ-0075"
+      ],
+      "broken": [
+       "REQ-0030"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.5609846676216245,
+     "edge_after": 0.40474295718605763,
+     "tp_before": 0.36684782608695654,
+     "tp_after": 0.34103260869565216,
+     "cells_fixed": 7364,
+     "cells_broken": 18574,
+     "port_fixed": {
+      "sbbiu_dat_o": 2490,
+      "sbbiu_adr_o": 2330,
+      "sbbiu_sel_o": 2457,
+      "dcsb_ack_o": 87
+     },
+     "port_broken": {
+      "sbbiu_sel_o": 4785,
+      "sbbiu_dat_o": 4248,
+      "sbbiu_adr_o": 4319,
+      "dcsb_ack_o": 94,
+      "sbbiu_cyc_o": 1424,
+      "sbbiu_stb_o": 1445,
+      "sbbiu_we_o": 1640,
+      "sbbiu_cab_o": 350,
+      "dcsb_err_o": 269
+     },
+     "own": {
+      "edge_before": 0.6406392694063927,
+      "edge_after": 0.4316590563165906,
+      "cells_fixed": 2482,
+      "cells_broken": 7394
+     }
+    },
+    {
+     "commit": 2,
+     "latched": true,
+     "requirements": {
+      "passing": "62 -> 64",
+      "failing": "2 -> 0",
+      "uncovered": "4 -> 4",
+      "repaired": [
+       "REQ-0030",
+       "REQ-0034"
+      ],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.40474295718605763,
+     "edge_after": 0.4453817178630166,
+     "tp_before": 0.34103260869565216,
+     "tp_after": 0.34103260869565216,
+     "cells_fixed": 8577,
+     "cells_broken": 7271,
+     "port_fixed": {
+      "sbbiu_sel_o": 3281,
+      "sbbiu_dat_o": 2612,
+      "sbbiu_adr_o": 2684
+     },
+     "port_broken": {
+      "sbbiu_dat_o": 2487,
+      "sbbiu_adr_o": 2327,
+      "sbbiu_sel_o": 2457
+     },
+     "own": {
+      "edge_before": 0.4316590563165906,
+      "edge_after": 0.4735159817351598,
+      "cells_fixed": 2667,
+      "cells_broken": 2450
+     }
+    },
+    {
+     "commit": 3,
+     "latched": false,
+     "requirements": {
+      "passing": "64 -> 62",
+      "failing": "0 -> 1",
+      "uncovered": "4 -> 5",
+      "repaired": [],
+      "broken": [
+       "REQ-0010"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": [
+       "REQ-0022"
+      ]
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4453817178630166,
+     "edge_after": 0.430261552336994,
+     "tp_before": 0.34103260869565216,
+     "tp_after": 0.34103260869565216,
+     "cells_fixed": 7,
+     "cells_broken": 987,
+     "port_fixed": {
+      "dcsb_ack_o": 1,
+      "sbbiu_dat_o": 1,
+      "sbbiu_adr_o": 1,
+      "sbbiu_cyc_o": 1,
+      "sbbiu_stb_o": 1,
+      "sbbiu_we_o": 1,
+      "sbbiu_sel_o": 1
+     },
+     "port_broken": {
+      "dcsb_ack_o": 987
+     },
+     "own": {
+      "edge_before": 0.4735159817351598,
+      "edge_after": 0.4582952815829528,
+      "cells_fixed": 0,
+      "cells_broken": 263
+     }
+    },
+    {
+     "commit": 4,
+     "latched": false,
+     "requirements": {
+      "passing": "64 -> 63",
+      "failing": "0 -> 1",
+      "uncovered": "4 -> 4",
+      "repaired": [],
+      "broken": [
+       "REQ-0010"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4453817178630166,
+     "edge_after": 0.43328558544219853,
+     "tp_before": 0.34103260869565216,
+     "tp_after": 0.34103260869565216,
+     "cells_fixed": 68,
+     "cells_broken": 518,
+     "port_fixed": {
+      "sbbiu_cyc_o": 3,
+      "sbbiu_stb_o": 3,
+      "sbbiu_cab_o": 2,
+      "sbbiu_dat_o": 19,
+      "sbbiu_adr_o": 19,
+      "sbbiu_sel_o": 19,
+      "dcsb_ack_o": 2,
+      "sbbiu_we_o": 1
+     },
+     "port_broken": {
+      "dcsb_ack_o": 518
+     },
+     "own": {
+      "edge_before": 0.4735159817351598,
+      "edge_after": 0.460882800608828,
+      "cells_fixed": 0,
+      "cells_broken": 159
+     }
+    },
+    {
+     "commit": 5,
+     "latched": true,
+     "requirements": {
+      "passing": "64 -> 64",
+      "failing": "0 -> 0",
+      "uncovered": "4 -> 4",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4453817178630166,
+     "edge_after": 0.43180009549578224,
+     "tp_before": 0.34103260869565216,
+     "tp_after": 0.34103260869565216,
+     "cells_fixed": 0,
+     "cells_broken": 567,
+     "port_fixed": {},
+     "port_broken": {
+      "dcsb_ack_o": 525,
+      "sbbiu_dat_o": 7,
+      "sbbiu_adr_o": 7,
+      "sbbiu_cyc_o": 7,
+      "sbbiu_stb_o": 7,
+      "sbbiu_we_o": 7,
+      "sbbiu_sel_o": 7
+     },
+     "own": {
+      "edge_before": 0.4735159817351598,
+      "edge_after": 0.460882800608828,
+      "cells_fixed": 0,
+      "cells_broken": 159
+     }
+    }
+   ]
+  },
+  {
+   "module": "i2c_master_byte_ctrl",
+   "run": "luna13",
+   "commits": [
+    {
+     "commit": 1,
+     "latched": true,
+     "requirements": {
+      "passing": "49 -> 52",
+      "failing": "27 -> 24",
+      "uncovered": "21 -> 21",
+      "repaired": [
+       "REQ-0028",
+       "REQ-0059",
+       "REQ-0113"
+      ],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.34410414676911233,
+     "edge_after": 0.34410414676911233,
+     "tp_before": 0.21356196414653156,
+     "tp_after": 0.21356196414653156,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.34425479626523636,
+      "edge_after": 0.34425479626523636,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 2,
+     "latched": false,
+     "requirements": {
+      "passing": "52 -> 39",
+      "failing": "24 -> 34",
+      "uncovered": "21 -> 24",
+      "repaired": [],
+      "broken": [
+       "REQ-0052",
+       "REQ-0059",
+       "REQ-0062",
+       "REQ-0070",
+       "REQ-0091",
+       "REQ-0097",
+       "REQ-0098",
+       "REQ-0102",
+       "REQ-0111",
+       "REQ-0117",
+       "REQ-0120"
+      ],
+      "silenced": [
+       "REQ-0114"
+      ],
+      "went_dark_from_passing": [
+       "REQ-0058",
+       "REQ-0121"
+      ]
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.34410414676911233,
+     "edge_after": 0.1374820031075822,
+     "tp_before": 0.21356196414653156,
+     "tp_after": 0.1449727201870616,
+     "cells_fixed": 126811,
+     "cells_broken": 717279,
+     "port_fixed": {
+      "sda_oen": 64371,
+      "ack_out": 15098,
+      "scl_oen": 25403,
+      "dout": 19041,
+      "cmd_ack": 780,
+      "i2c_al": 2118
+     },
+     "port_broken": {
+      "sda_oen": 53186,
+      "scl_oen": 195467,
+      "dout": 260706,
+      "cmd_ack": 10043,
+      "ack_out": 196691,
+      "i2c_al": 1186
+     },
+     "own": {
+      "edge_before": 0.34425479626523636,
+      "edge_after": 0.14156494129676303,
+      "cells_fixed": 48891,
+      "cells_broken": 281077
+     }
+    },
+    {
+     "commit": 3,
+     "latched": true,
+     "requirements": {
+      "passing": "52 -> 55",
+      "failing": "24 -> 21",
+      "uncovered": "21 -> 21",
+      "repaired": [
+       "REQ-0014",
+       "REQ-0051",
+       "REQ-0099"
+      ],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.34410414676911233,
+     "edge_after": 0.40406409031945373,
+     "tp_before": 0.21356196414653156,
+     "tp_after": 0.21356196414653156,
+     "cells_fixed": 94001,
+     "cells_broken": 7413,
+     "port_fixed": {
+      "ack_out": 94001
+     },
+     "port_broken": {
+      "ack_out": 7413
+     },
+     "own": {
+      "edge_before": 0.34425479626523636,
+      "edge_after": 0.396670643000009,
+      "cells_fixed": 31347,
+      "cells_broken": 3875
+     }
+    },
+    {
+     "commit": 4,
+     "latched": true,
+     "requirements": {
+      "passing": "55 -> 55",
+      "failing": "21 -> 21",
+      "uncovered": "21 -> 21",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.40406409031945373,
+     "edge_after": 0.4430300352097618,
+     "tp_before": 0.21356196414653156,
+     "tp_after": 0.2665627435697584,
+     "cells_fixed": 23961,
+     "cells_broken": 238,
+     "port_fixed": {
+      "dout": 22745,
+      "sda_oen": 1216
+     },
+     "port_broken": {
+      "dout": 231,
+      "sda_oen": 7
+     },
+     "own": {
+      "edge_before": 0.396670643000009,
+      "edge_after": 0.44057922918927644,
+      "cells_fixed": 10723,
+      "cells_broken": 129
+     }
+    },
+    {
+     "commit": 5,
+     "latched": true,
+     "requirements": {
+      "passing": "55 -> 58",
+      "failing": "21 -> 20",
+      "uncovered": "21 -> 19",
+      "repaired": [
+       "REQ-0034",
+       "REQ-0043",
+       "REQ-0119"
+      ],
+      "broken": [
+       "REQ-0066"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4430300352097618,
+     "edge_after": 0.4368772362475232,
+     "tp_before": 0.2665627435697584,
+     "tp_after": 0.1995323460639127,
+     "cells_fixed": 1335,
+     "cells_broken": 5892,
+     "port_fixed": {
+      "dout": 667,
+      "sda_oen": 668
+     },
+     "port_broken": {
+      "dout": 5071,
+      "sda_oen": 821
+     },
+     "own": {
+      "edge_before": 0.44057922918927644,
+      "edge_after": 0.4338792569937126,
+      "cells_fixed": 471,
+      "cells_broken": 2308
+     }
+    },
+    {
+     "commit": 6,
+     "latched": false,
+     "requirements": {
+      "passing": "58 -> 58",
+      "failing": "20 -> 20",
+      "uncovered": "19 -> 19",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4368772362475232,
+     "edge_after": 0.4368736725064504,
+     "tp_before": 0.1995323460639127,
+     "tp_after": 0.1995323460639127,
+     "cells_fixed": 29,
+     "cells_broken": 45,
+     "port_fixed": {
+      "dout": 29
+     },
+     "port_broken": {
+      "dout": 45
+     },
+     "own": {
+      "edge_before": 0.4338792569937126,
+      "edge_after": 0.4338478648883786,
+      "cells_fixed": 3,
+      "cells_broken": 21
+     }
+    },
+    {
+     "commit": 7,
+     "latched": false,
+     "requirements": {
+      "passing": "58 -> 58",
+      "failing": "20 -> 20",
+      "uncovered": "19 -> 19",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4368772362475232,
+     "edge_after": 0.4368736725064504,
+     "tp_before": 0.1995323460639127,
+     "tp_after": 0.1995323460639127,
+     "cells_fixed": 29,
+     "cells_broken": 45,
+     "port_fixed": {
+      "dout": 29
+     },
+     "port_broken": {
+      "dout": 45
+     },
+     "own": {
+      "edge_before": 0.4338792569937126,
+      "edge_after": 0.4338478648883786,
+      "cells_fixed": 3,
+      "cells_broken": 21
+     }
+    },
+    {
+     "commit": 8,
+     "latched": false,
+     "requirements": {
+      "passing": "58 -> 58",
+      "failing": "20 -> 20",
+      "uncovered": "19 -> 19",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4368772362475232,
+     "edge_after": 0.4368736725064504,
+     "tp_before": 0.1995323460639127,
+     "tp_after": 0.1995323460639127,
+     "cells_fixed": 29,
+     "cells_broken": 45,
+     "port_fixed": {
+      "dout": 29
+     },
+     "port_broken": {
+      "dout": 45
+     },
+     "own": {
+      "edge_before": 0.4338792569937126,
+      "edge_after": 0.4338478648883786,
+      "cells_fixed": 3,
+      "cells_broken": 21
+     }
+    },
+    {
+     "commit": 9,
+     "latched": false,
+     "requirements": {
+      "passing": "58 -> 55",
+      "failing": "20 -> 21",
+      "uncovered": "19 -> 21",
+      "repaired": [
+       "REQ-0066"
+      ],
+      "broken": [
+       "REQ-0034",
+       "REQ-0043",
+       "REQ-0119"
+      ],
+      "silenced": [
+       "REQ-0031"
+      ],
+      "went_dark_from_passing": [
+       "REQ-0026"
+      ]
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4368772362475232,
+     "edge_after": 0.4430300352097618,
+     "tp_before": 0.1995323460639127,
+     "tp_after": 0.2665627435697584,
+     "cells_fixed": 5892,
+     "cells_broken": 1335,
+     "port_fixed": {
+      "dout": 5071,
+      "sda_oen": 821
+     },
+     "port_broken": {
+      "dout": 667,
+      "sda_oen": 668
+     },
+     "own": {
+      "edge_before": 0.4338792569937126,
+      "edge_after": 0.44057922918927644,
+      "cells_fixed": 2308,
+      "cells_broken": 471
+     }
+    },
+    {
+     "commit": 10,
+     "latched": false,
+     "requirements": {
+      "passing": "58 -> 53",
+      "failing": "20 -> 25",
+      "uncovered": "19 -> 19",
+      "repaired": [],
+      "broken": [
+       "REQ-0002",
+       "REQ-0024",
+       "REQ-0085",
+       "REQ-0091",
+       "REQ-0111"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4368772362475232,
+     "edge_after": 0.4356477455773973,
+     "tp_before": 0.1995323460639127,
+     "tp_after": 0.1979734996102884,
+     "cells_fixed": 773,
+     "cells_broken": 4168,
+     "port_fixed": {
+      "sda_oen": 721,
+      "dout": 44,
+      "i2c_al": 1,
+      "ack_out": 2,
+      "scl_oen": 5
+     },
+     "port_broken": {
+      "cmd_ack": 168,
+      "sda_oen": 218,
+      "scl_oen": 1038,
+      "dout": 2203,
+      "ack_out": 538,
+      "i2c_al": 3
+     },
+     "own": {
+      "edge_before": 0.4338792569937126,
+      "edge_after": 0.4336998735346614,
+      "cells_fixed": 390,
+      "cells_broken": 2420
+     }
+    },
+    {
+     "commit": 11,
+     "latched": false,
+     "requirements": {
+      "passing": "58 -> 55",
+      "failing": "20 -> 21",
+      "uncovered": "19 -> 21",
+      "repaired": [
+       "REQ-0066"
+      ],
+      "broken": [
+       "REQ-0034",
+       "REQ-0043",
+       "REQ-0119"
+      ],
+      "silenced": [
+       "REQ-0031"
+      ],
+      "went_dark_from_passing": [
+       "REQ-0026"
+      ]
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4368772362475232,
+     "edge_after": 0.4430300352097618,
+     "tp_before": 0.1995323460639127,
+     "tp_after": 0.2665627435697584,
+     "cells_fixed": 5892,
+     "cells_broken": 1335,
+     "port_fixed": {
+      "dout": 5071,
+      "sda_oen": 821
+     },
+     "port_broken": {
+      "dout": 667,
+      "sda_oen": 668
+     },
+     "own": {
+      "edge_before": 0.4338792569937126,
+      "edge_after": 0.44057922918927644,
+      "cells_fixed": 2308,
+      "cells_broken": 471
+     }
+    },
+    {
+     "commit": 12,
+     "latched": false,
+     "requirements": {
+      "passing": "58 -> 40",
+      "failing": "20 -> 33",
+      "uncovered": "19 -> 24",
+      "repaired": [
+       "REQ-0066"
+      ],
+      "broken": [
+       "REQ-0034",
+       "REQ-0043",
+       "REQ-0051",
+       "REQ-0052",
+       "REQ-0059",
+       "REQ-0062",
+       "REQ-0070",
+       "REQ-0091",
+       "REQ-0097",
+       "REQ-0098",
+       "REQ-0099",
+       "REQ-0102",
+       "REQ-0111",
+       "REQ-0117",
+       "REQ-0119",
+       "REQ-0120"
+      ],
+      "silenced": [
+       "REQ-0031",
+       "REQ-0114"
+      ],
+      "went_dark_from_passing": [
+       "REQ-0026",
+       "REQ-0058",
+       "REQ-0121"
+      ]
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4368772362475232,
+     "edge_after": 0.21642243161180882,
+     "tp_before": 0.1995323460639127,
+     "tp_after": 0.16835541699142634,
+     "cells_fixed": 130828,
+     "cells_broken": 637559,
+     "port_fixed": {
+      "dout": 19070,
+      "sda_oen": 63680,
+      "scl_oen": 25403,
+      "cmd_ack": 780,
+      "ack_out": 19777,
+      "i2c_al": 2118
+     },
+     "port_broken": {
+      "sda_oen": 52977,
+      "scl_oen": 195467,
+      "dout": 258189,
+      "cmd_ack": 10043,
+      "ack_out": 119697,
+      "i2c_al": 1186
+     },
+     "own": {
+      "edge_before": 0.4338792569937126,
+      "edge_after": 0.22222919824562978,
+      "cells_fixed": 52159,
+      "cells_broken": 242341
+     }
+    },
+    {
+     "commit": 13,
+     "latched": false,
+     "requirements": {
+      "passing": "58 -> 55",
+      "failing": "20 -> 21",
+      "uncovered": "19 -> 21",
+      "repaired": [
+       "REQ-0066"
+      ],
+      "broken": [
+       "REQ-0034",
+       "REQ-0043",
+       "REQ-0119"
+      ],
+      "silenced": [
+       "REQ-0031"
+      ],
+      "went_dark_from_passing": [
+       "REQ-0026"
+      ]
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4368772362475232,
+     "edge_after": 0.4430300352097618,
+     "tp_before": 0.1995323460639127,
+     "tp_after": 0.2665627435697584,
+     "cells_fixed": 5892,
+     "cells_broken": 1335,
+     "port_fixed": {
+      "dout": 5071,
+      "sda_oen": 821
+     },
+     "port_broken": {
+      "dout": 667,
+      "sda_oen": 668
+     },
+     "own": {
+      "edge_before": 0.4338792569937126,
+      "edge_after": 0.44057922918927644,
+      "cells_fixed": 2308,
+      "cells_broken": 471
+     }
+    },
+    {
+     "commit": 14,
+     "latched": false,
+     "requirements": {
+      "passing": "58 -> 58",
+      "failing": "20 -> 20",
+      "uncovered": "19 -> 19",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4368772362475232,
+     "edge_after": 0.4368736725064504,
+     "tp_before": 0.1995323460639127,
+     "tp_after": 0.1995323460639127,
+     "cells_fixed": 29,
+     "cells_broken": 45,
+     "port_fixed": {
+      "dout": 29
+     },
+     "port_broken": {
+      "dout": 45
+     },
+     "own": {
+      "edge_before": 0.4338792569937126,
+      "edge_after": 0.4338478648883786,
+      "cells_fixed": 3,
+      "cells_broken": 21
+     }
+    },
+    {
+     "commit": 15,
+     "latched": false,
+     "requirements": {
+      "passing": "58 -> 58",
+      "failing": "20 -> 20",
+      "uncovered": "19 -> 19",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4368772362475232,
+     "edge_after": 0.4368736725064504,
+     "tp_before": 0.1995323460639127,
+     "tp_after": 0.1995323460639127,
+     "cells_fixed": 29,
+     "cells_broken": 45,
+     "port_fixed": {
+      "dout": 29
+     },
+     "port_broken": {
+      "dout": 45
+     },
+     "own": {
+      "edge_before": 0.4338792569937126,
+      "edge_after": 0.4338478648883786,
+      "cells_fixed": 3,
+      "cells_broken": 21
+     }
+    },
+    {
+     "commit": 16,
+     "latched": false,
+     "requirements": {
+      "passing": "58 -> 56",
+      "failing": "20 -> 22",
+      "uncovered": "19 -> 19",
+      "repaired": [
+       "REQ-0116"
+      ],
+      "broken": [
+       "REQ-0024",
+       "REQ-0044",
+       "REQ-0058"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4368772362475232,
+     "edge_after": 0.4368130889082123,
+     "tp_before": 0.1995323460639127,
+     "tp_after": 0.1995323460639127,
+     "cells_fixed": 18466,
+     "cells_broken": 39049,
+     "port_fixed": {
+      "sda_oen": 5661,
+      "i2c_al": 515,
+      "ack_out": 2691,
+      "scl_oen": 6261,
+      "dout": 3121,
+      "cmd_ack": 217
+     },
+     "port_broken": {
+      "sda_oen": 5923,
+      "cmd_ack": 619,
+      "ack_out": 17772,
+      "scl_oen": 11360,
+      "dout": 3272,
+      "i2c_al": 103
+     },
+     "own": {
+      "edge_before": 0.4338792569937126,
+      "edge_after": 0.43984824159364266,
+      "cells_fixed": 9080,
+      "cells_broken": 16854
+     }
+    },
+    {
+     "commit": 17,
+     "latched": false,
+     "requirements": {
+      "passing": "58 -> 43",
+      "failing": "20 -> 32",
+      "uncovered": "19 -> 22",
+      "repaired": [],
+      "broken": [
+       "REQ-0051",
+       "REQ-0052",
+       "REQ-0059",
+       "REQ-0062",
+       "REQ-0070",
+       "REQ-0091",
+       "REQ-0097",
+       "REQ-0098",
+       "REQ-0099",
+       "REQ-0102",
+       "REQ-0111",
+       "REQ-0117",
+       "REQ-0120"
+      ],
+      "silenced": [
+       "REQ-0114"
+      ],
+      "went_dark_from_passing": [
+       "REQ-0058",
+       "REQ-0121"
+      ]
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4368772362475232,
+     "edge_after": 0.21543527533463527,
+     "tp_before": 0.1995323460639127,
+     "tp_after": 0.13795791114575215,
+     "cells_fixed": 129298,
+     "cells_broken": 637846,
+     "port_fixed": {
+      "dout": 18570,
+      "sda_oen": 62650,
+      "scl_oen": 25403,
+      "cmd_ack": 780,
+      "ack_out": 19777,
+      "i2c_al": 2118
+     },
+     "port_broken": {
+      "sda_oen": 53123,
+      "scl_oen": 195467,
+      "dout": 258330,
+      "cmd_ack": 10043,
+      "ack_out": 119697,
+      "i2c_al": 1186
+     },
+     "own": {
+      "edge_before": 0.4338792569937126,
+      "edge_after": 0.22151614899590108,
+      "cells_fixed": 51546,
+      "cells_broken": 242472
+     }
+    }
+   ]
+  },
+  {
+   "module": "or1200_dc_fsm",
+   "run": "luna13",
+   "commits": [
+    {
+     "commit": 1,
+     "latched": true,
+     "requirements": {
+      "passing": "76 -> 84",
+      "failing": "8 -> 0",
+      "uncovered": "0 -> 0",
+      "repaired": [
+       "REQ-0002",
+       "REQ-0036",
+       "REQ-0038",
+       "REQ-0039",
+       "REQ-0040",
+       "REQ-0058",
+       "REQ-0081",
+       "REQ-0097"
+      ],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.9028885272579332,
+     "edge_after": 0.8957282343368592,
+     "tp_before": 0.7899159663865546,
+     "tp_after": 0.7531512605042017,
+     "cells_fixed": 74,
+     "cells_broken": 308,
+     "port_fixed": {
+      "first_hit_ack": 42,
+      "biu_read": 6,
+      "tag_we": 16,
+      "dcram_we": 10
+     },
+     "port_broken": {
+      "biu_read": 245,
+      "tag_we": 58,
+      "dcram_we": 1,
+      "first_hit_ack": 4
+     },
+     "own": {
+      "edge_before": 0.9062819203268642,
+      "edge_after": 0.898876404494382,
+      "cells_fixed": 18,
+      "cells_broken": 95
+     }
+    }
+   ]
+  },
+  {
+   "module": "or1200_sb",
+   "run": "luna13",
+   "commits": [
+    {
+     "commit": 1,
+     "latched": false,
+     "requirements": {
+      "passing": "28 -> 28",
+      "failing": "7 -> 7",
+      "uncovered": "31 -> 31",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 1.0,
+     "edge_after": 1.0,
+     "tp_before": 1.0,
+     "tp_after": 1.0,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 1.0,
+      "edge_after": 1.0,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 2,
+     "latched": false,
+     "requirements": {
+      "passing": "28 -> 28",
+      "failing": "7 -> 7",
+      "uncovered": "31 -> 31",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 1.0,
+     "edge_after": 1.0,
+     "tp_before": 1.0,
+     "tp_after": 1.0,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 1.0,
+      "edge_after": 1.0,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 3,
+     "latched": false,
+     "requirements": {
+      "passing": "28 -> 26",
+      "failing": "7 -> 11",
+      "uncovered": "31 -> 29",
+      "repaired": [],
+      "broken": [
+       "REQ-0009"
+      ],
+      "silenced": [
+       "REQ-0018"
+      ],
+      "went_dark_from_passing": [
+       "REQ-0069"
+      ]
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 1.0,
+     "edge_after": 1.0,
+     "tp_before": 1.0,
+     "tp_after": 1.0,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 1.0,
+      "edge_after": 1.0,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 4,
+     "latched": false,
+     "requirements": {
+      "passing": "28 -> 28",
+      "failing": "7 -> 7",
+      "uncovered": "31 -> 31",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 1.0,
+     "edge_after": 1.0,
+     "tp_before": 1.0,
+     "tp_after": 1.0,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 1.0,
+      "edge_after": 1.0,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 5,
+     "latched": false,
+     "requirements": {
+      "passing": "28 -> 28",
+      "failing": "7 -> 7",
+      "uncovered": "31 -> 31",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 1.0,
+     "edge_after": 0.0,
+     "tp_before": 1.0,
+     "tp_after": 0.0,
+     "cells_fixed": 0,
+     "cells_broken": 114398,
+     "port_fixed": {},
+     "port_broken": {
+      "dcsb_ack_o": 18849,
+      "sbbiu_dat_o": 18849,
+      "sbbiu_adr_o": 18849,
+      "sbbiu_cyc_o": 9285,
+      "sbbiu_stb_o": 9302,
+      "sbbiu_we_o": 13508,
+      "sbbiu_sel_o": 18849,
+      "sbbiu_cab_o": 4298,
+      "dcsb_err_o": 2609
+     },
+     "own": {
+      "edge_before": 1.0,
+      "edge_after": 0.0,
+      "cells_fixed": 0,
+      "cells_broken": 39768
+     }
+    },
+    {
+     "commit": 6,
+     "latched": true,
+     "requirements": {
+      "passing": "28 -> 62",
+      "failing": "7 -> 3",
+      "uncovered": "31 -> 1",
+      "repaired": [
+       "REQ-0004",
+       "REQ-0016",
+       "REQ-0017",
+       "REQ-0018",
+       "REQ-0074",
+       "REQ-0082"
+      ],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 1.0,
+     "edge_after": 0.44559393071250464,
+     "tp_before": 1.0,
+     "tp_after": 0.34103260869565216,
+     "cells_fixed": 0,
+     "cells_broken": 46643,
+     "port_fixed": {},
+     "port_broken": {
+      "dcsb_ack_o": 1006,
+      "sbbiu_dat_o": 7418,
+      "sbbiu_adr_o": 7470,
+      "sbbiu_we_o": 7262,
+      "sbbiu_cyc_o": 6234,
+      "sbbiu_stb_o": 6358,
+      "sbbiu_sel_o": 6665,
+      "sbbiu_cab_o": 2706,
+      "dcsb_err_o": 1524
+     },
+     "own": {
+      "edge_before": 1.0,
+      "edge_after": 0.4381151207873546,
+      "cells_fixed": 0,
+      "cells_broken": 16060
+     }
+    },
+    {
+     "commit": 7,
+     "latched": true,
+     "requirements": {
+      "passing": "62 -> 65",
+      "failing": "3 -> 0",
+      "uncovered": "1 -> 1",
+      "repaired": [
+       "REQ-0011",
+       "REQ-0037",
+       "REQ-0038"
+      ],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.44559393071250464,
+     "edge_after": 0.44559393071250464,
+     "tp_before": 0.34103260869565216,
+     "tp_after": 0.34103260869565216,
+     "cells_fixed": 1868,
+     "cells_broken": 2446,
+     "port_fixed": {
+      "sbbiu_dat_o": 596,
+      "sbbiu_adr_o": 596,
+      "sbbiu_sel_o": 676
+     },
+     "port_broken": {
+      "sbbiu_dat_o": 889,
+      "sbbiu_adr_o": 761,
+      "sbbiu_sel_o": 796
+     },
+     "own": {
+      "edge_before": 0.4381151207873546,
+      "edge_after": 0.4381151207873546,
+      "cells_fixed": 363,
+      "cells_broken": 879
+     }
+    },
+    {
+     "commit": 8,
+     "latched": true,
+     "requirements": {
+      "passing": "65 -> 65",
+      "failing": "0 -> 0",
+      "uncovered": "1 -> 1",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.44559393071250464,
+     "edge_after": 0.4460183564114807,
+     "tp_before": 0.34103260869565216,
+     "tp_after": 0.3423913043478261,
+     "cells_fixed": 49,
+     "cells_broken": 0,
+     "port_fixed": {
+      "sbbiu_dat_o": 8,
+      "sbbiu_adr_o": 8,
+      "sbbiu_cyc_o": 8,
+      "sbbiu_stb_o": 8,
+      "sbbiu_we_o": 8,
+      "sbbiu_sel_o": 8,
+      "dcsb_ack_o": 1
+     },
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.4381151207873546,
+      "edge_after": 0.4384133611691023,
+      "cells_fixed": 12,
+      "cells_broken": 0
+     }
+    }
+   ]
+  },
+  {
+   "module": "i2c_master_byte_ctrl",
+   "run": "luna14",
+   "commits": [
+    {
+     "commit": 1,
+     "latched": false,
+     "requirements": {
+      "passing": "72 -> 72",
+      "failing": "14 -> 13",
+      "uncovered": "12 -> 13",
+      "repaired": [],
+      "broken": [],
+      "silenced": [
+       "REQ-0084"
+      ],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.16653183846274466,
+     "edge_after": 0.08587725050248748,
+     "tp_before": 0.13795791114575215,
+     "tp_after": 0.11301636788776305,
+     "cells_fixed": 184987,
+     "cells_broken": 531437,
+     "port_fixed": {
+      "sda_oen": 64955,
+      "scl_oen": 52657,
+      "dout": 30908,
+      "cmd_ack": 4412,
+      "ack_out": 31242,
+      "i2c_al": 813
+     },
+     "port_broken": {
+      "sda_oen": 50935,
+      "i2c_al": 1249,
+      "scl_oen": 178584,
+      "dout": 39014,
+      "cmd_ack": 2223,
+      "i2c_busy": 146459,
+      "ack_out": 112973
+     },
+     "own": {
+      "edge_before": 0.15469924032944715,
+      "edge_after": 0.06636311423479327,
+      "cells_fixed": 60642,
+      "cells_broken": 152757
+     }
+    },
+    {
+     "commit": 2,
+     "latched": false,
+     "requirements": {
+      "passing": "72 -> 65",
+      "failing": "14 -> 20",
+      "uncovered": "12 -> 13",
+      "repaired": [
+       "REQ-0015",
+       "REQ-0031",
+       "REQ-0062",
+       "REQ-0069",
+       "REQ-0070"
+      ],
+      "broken": [
+       "REQ-0010",
+       "REQ-0026",
+       "REQ-0037",
+       "REQ-0049",
+       "REQ-0051",
+       "REQ-0061",
+       "REQ-0071",
+       "REQ-0089",
+       "REQ-0094",
+       "REQ-0107",
+       "REQ-0120"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": [
+       "REQ-0057",
+       "REQ-0099"
+      ]
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.16653183846274466,
+     "edge_after": 0.1085212612792405,
+     "tp_before": 0.13795791114575215,
+     "tp_after": 0.11301636788776305,
+     "cells_fixed": 316561,
+     "cells_broken": 611664,
+     "port_fixed": {
+      "sda_oen": 103610,
+      "scl_oen": 72907,
+      "dout": 66428,
+      "cmd_ack": 4921,
+      "ack_out": 67811,
+      "i2c_al": 884
+     },
+     "port_broken": {
+      "sda_oen": 37561,
+      "i2c_al": 956,
+      "scl_oen": 156939,
+      "dout": 56663,
+      "ack_out": 212845,
+      "i2c_busy": 146459,
+      "cmd_ack": 241
+     },
+     "own": {
+      "edge_before": 0.15469924032944715,
+      "edge_after": 0.07381179354487266,
+      "cells_fixed": 85015,
+      "cells_broken": 201073
+     }
+    },
+    {
+     "commit": 3,
+     "latched": false,
+     "requirements": {
+      "passing": "72 -> 69",
+      "failing": "14 -> 17",
+      "uncovered": "12 -> 12",
+      "repaired": [],
+      "broken": [
+       "REQ-0019",
+       "REQ-0021",
+       "REQ-0023"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.16653183846274466,
+     "edge_after": 0.16653183846274466,
+     "tp_before": 0.13795791114575215,
+     "tp_after": 0.13795791114575215,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.15469924032944715,
+      "edge_after": 0.15469924032944715,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 4,
+     "latched": false,
+     "requirements": {
+      "passing": "72 -> 70",
+      "failing": "14 -> 16",
+      "uncovered": "12 -> 12",
+      "repaired": [],
+      "broken": [
+       "REQ-0019",
+       "REQ-0021"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.16653183846274466,
+     "edge_after": 0.16653183846274466,
+     "tp_before": 0.13795791114575215,
+     "tp_after": 0.13795791114575215,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.15469924032944715,
+      "edge_after": 0.15469924032944715,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 5,
+     "latched": false,
+     "requirements": {
+      "passing": "72 -> 72",
+      "failing": "14 -> 14",
+      "uncovered": "12 -> 12",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.16653183846274466,
+     "edge_after": 0.16653183846274466,
+     "tp_before": 0.13795791114575215,
+     "tp_after": 0.13795791114575215,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.15469924032944715,
+      "edge_after": 0.15469924032944715,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 6,
+     "latched": false,
+     "requirements": {
+      "passing": "72 -> 72",
+      "failing": "14 -> 14",
+      "uncovered": "12 -> 12",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.16653183846274466,
+     "edge_after": 0.16653183846274466,
+     "tp_before": 0.13795791114575215,
+     "tp_after": 0.13795791114575215,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.15469924032944715,
+      "edge_after": 0.15469924032944715,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 7,
+     "latched": false,
+     "requirements": {
+      "passing": "72 -> 72",
+      "failing": "14 -> 14",
+      "uncovered": "12 -> 12",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.16653183846274466,
+     "edge_after": 0.16653183846274466,
+     "tp_before": 0.13795791114575215,
+     "tp_after": 0.13795791114575215,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.15469924032944715,
+      "edge_after": 0.15469924032944715,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 8,
+     "latched": false,
+     "requirements": {
+      "passing": "72 -> 69",
+      "failing": "14 -> 17",
+      "uncovered": "12 -> 12",
+      "repaired": [],
+      "broken": [
+       "REQ-0019",
+       "REQ-0021",
+       "REQ-0023"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.16653183846274466,
+     "edge_after": 0.16653183846274466,
+     "tp_before": 0.13795791114575215,
+     "tp_after": 0.13795791114575215,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.15469924032944715,
+      "edge_after": 0.15469924032944715,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 9,
+     "latched": false,
+     "requirements": {
+      "passing": "72 -> 72",
+      "failing": "14 -> 14",
+      "uncovered": "12 -> 12",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.16653183846274466,
+     "edge_after": 0.16653183846274466,
+     "tp_before": 0.13795791114575215,
+     "tp_after": 0.13795791114575215,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.15469924032944715,
+      "edge_after": 0.15469924032944715,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 10,
+     "latched": false,
+     "requirements": {
+      "passing": "72 -> 72",
+      "failing": "14 -> 14",
+      "uncovered": "12 -> 12",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.16653183846274466,
+     "edge_after": 0.16653183846274466,
+     "tp_before": 0.13795791114575215,
+     "tp_after": 0.13795791114575215,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.15469924032944715,
+      "edge_after": 0.15469924032944715,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 11,
+     "latched": false,
+     "requirements": {
+      "passing": "72 -> 68",
+      "failing": "14 -> 17",
+      "uncovered": "12 -> 13",
+      "repaired": [
+       "REQ-0012",
+       "REQ-0013",
+       "REQ-0015",
+       "REQ-0031",
+       "REQ-0062",
+       "REQ-0069",
+       "REQ-0070",
+       "REQ-0121"
+      ],
+      "broken": [
+       "REQ-0010",
+       "REQ-0026",
+       "REQ-0037",
+       "REQ-0049",
+       "REQ-0051",
+       "REQ-0061",
+       "REQ-0071",
+       "REQ-0089",
+       "REQ-0094",
+       "REQ-0107",
+       "REQ-0120"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": [
+       "REQ-0057",
+       "REQ-0099"
+      ]
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.16653183846274466,
+     "edge_after": 0.08053342076378099,
+     "tp_before": 0.13795791114575215,
+     "tp_after": 0.11145752143413874,
+     "cells_fixed": 316561,
+     "cells_broken": 769692,
+     "port_fixed": {
+      "sda_oen": 103610,
+      "scl_oen": 72907,
+      "dout": 66428,
+      "cmd_ack": 4921,
+      "ack_out": 67811,
+      "i2c_al": 884
+     },
+     "port_broken": {
+      "sda_oen": 37561,
+      "i2c_al": 956,
+      "scl_oen": 156939,
+      "dout": 56663,
+      "ack_out": 212845,
+      "i2c_busy": 304487,
+      "cmd_ack": 241
+     },
+     "own": {
+      "edge_before": 0.15469924032944715,
+      "edge_after": 0.0591453558254238,
+      "cells_fixed": 85015,
+      "cells_broken": 258383
+     }
+    },
+    {
+     "commit": 12,
+     "latched": false,
+     "requirements": {
+      "passing": "72 -> 72",
+      "failing": "14 -> 14",
+      "uncovered": "12 -> 12",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.16653183846274466,
+     "edge_after": 0.167449501788998,
+     "tp_before": 0.13795791114575215,
+     "tp_after": 0.13795791114575215,
+     "cells_fixed": 4512,
+     "cells_broken": 149,
+     "port_fixed": {
+      "dout": 4512
+     },
+     "port_broken": {
+      "dout": 149
+     },
+     "own": {
+      "edge_before": 0.15469924032944715,
+      "edge_after": 0.15641042341419512,
+      "cells_fixed": 1321,
+      "cells_broken": 149
+     }
+    },
+    {
+     "commit": 13,
+     "latched": false,
+     "requirements": {
+      "passing": "72 -> 68",
+      "failing": "14 -> 17",
+      "uncovered": "12 -> 13",
+      "repaired": [
+       "REQ-0012",
+       "REQ-0013",
+       "REQ-0015",
+       "REQ-0031",
+       "REQ-0062",
+       "REQ-0069",
+       "REQ-0070",
+       "REQ-0121"
+      ],
+      "broken": [
+       "REQ-0010",
+       "REQ-0026",
+       "REQ-0037",
+       "REQ-0049",
+       "REQ-0051",
+       "REQ-0061",
+       "REQ-0071",
+       "REQ-0089",
+       "REQ-0094",
+       "REQ-0107",
+       "REQ-0120"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": [
+       "REQ-0057",
+       "REQ-0099"
+      ]
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.16653183846274466,
+     "edge_after": 0.14858483841997977,
+     "tp_before": 0.13795791114575215,
+     "tp_after": 0.13172252533125486,
+     "cells_fixed": 161413,
+     "cells_broken": 550953,
+     "port_fixed": {
+      "dout": 66426,
+      "cmd_ack": 4921,
+      "sda_oen": 21086,
+      "ack_out": 67811,
+      "i2c_al": 801,
+      "scl_oen": 368
+     },
+     "port_broken": {
+      "sda_oen": 82417,
+      "scl_oen": 199515,
+      "dout": 55778,
+      "ack_out": 212845,
+      "i2c_al": 157,
+      "cmd_ack": 241
+     },
+     "own": {
+      "edge_before": 0.15469924032944715,
+      "edge_after": 0.08185849877730343,
+      "cells_fixed": 38202,
+      "cells_broken": 194608
+     }
+    },
+    {
+     "commit": 14,
+     "latched": false,
+     "requirements": {
+      "passing": "72 -> 72",
+      "failing": "14 -> 14",
+      "uncovered": "12 -> 12",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.16653183846274466,
+     "edge_after": 0.16653183846274466,
+     "tp_before": 0.13795791114575215,
+     "tp_after": 0.13795791114575215,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.15469924032944715,
+      "edge_after": 0.15469924032944715,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 15,
+     "latched": false,
+     "requirements": {
+      "passing": "72 -> 68",
+      "failing": "14 -> 17",
+      "uncovered": "12 -> 13",
+      "repaired": [
+       "REQ-0012",
+       "REQ-0013",
+       "REQ-0015",
+       "REQ-0031",
+       "REQ-0062",
+       "REQ-0069",
+       "REQ-0070",
+       "REQ-0121"
+      ],
+      "broken": [
+       "REQ-0010",
+       "REQ-0026",
+       "REQ-0037",
+       "REQ-0049",
+       "REQ-0051",
+       "REQ-0061",
+       "REQ-0071",
+       "REQ-0089",
+       "REQ-0094",
+       "REQ-0107",
+       "REQ-0120"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": [
+       "REQ-0057",
+       "REQ-0099"
+      ]
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.16653183846274466,
+     "edge_after": 0.10470805833131389,
+     "tp_before": 0.13795791114575215,
+     "tp_after": 0.11457521434138737,
+     "cells_fixed": 161413,
+     "cells_broken": 697412,
+     "port_fixed": {
+      "dout": 66426,
+      "cmd_ack": 4921,
+      "sda_oen": 21086,
+      "ack_out": 67811,
+      "i2c_al": 801,
+      "scl_oen": 368
+     },
+     "port_broken": {
+      "sda_oen": 82417,
+      "scl_oen": 199515,
+      "dout": 55778,
+      "ack_out": 212845,
+      "i2c_busy": 146459,
+      "i2c_al": 157,
+      "cmd_ack": 241
+     },
+     "own": {
+      "edge_before": 0.15469924032944715,
+      "edge_after": 0.06902166511732558,
+      "cells_fixed": 38202,
+      "cells_broken": 231929
+     }
+    }
+   ]
+  },
+  {
+   "module": "or1200_dc_fsm",
+   "run": "luna14",
+   "commits": [
+    {
+     "commit": 1,
+     "latched": true,
+     "requirements": {
+      "passing": "65 -> 73",
+      "failing": "9 -> 1",
+      "uncovered": "5 -> 5",
+      "repaired": [
+       "REQ-0025",
+       "REQ-0026",
+       "REQ-0039",
+       "REQ-0040",
+       "REQ-0047",
+       "REQ-0051",
+       "REQ-0058",
+       "REQ-0081",
+       "REQ-0087"
+      ],
+      "broken": [
+       "REQ-0078"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.9584621643612693,
+     "edge_after": 0.9608218063466233,
+     "tp_before": 0.7090336134453782,
+     "tp_after": 0.7552521008403361,
+     "cells_fixed": 472,
+     "cells_broken": 2,
+     "port_fixed": {
+      "first_hit_ack": 49,
+      "dcram_we": 215,
+      "tag_we": 206,
+      "biu_read": 2
+     },
+     "port_broken": {
+      "first_hit_ack": 2
+     },
+     "own": {
+      "edge_before": 0.9613916947250281,
+      "edge_after": 0.9641975308641976,
+      "cells_fixed": 183,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 2,
+     "latched": false,
+     "requirements": {
+      "passing": "73 -> 72",
+      "failing": "1 -> 2",
+      "uncovered": "5 -> 5",
+      "repaired": [
+       "REQ-0078"
+      ],
+      "broken": [
+       "REQ-0039",
+       "REQ-0081"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.9608218063466233,
+     "edge_after": 0.9604149715215623,
+     "tp_before": 0.7552521008403361,
+     "tp_after": 0.7552521008403361,
+     "cells_fixed": 0,
+     "cells_broken": 413,
+     "port_fixed": {},
+     "port_broken": {
+      "dcram_we": 207,
+      "tag_we": 206
+     },
+     "own": {
+      "edge_before": 0.9641975308641976,
+      "edge_after": 0.9634118967452301,
+      "cells_fixed": 0,
+      "cells_broken": 159
+     }
+    },
+    {
+     "commit": 3,
+     "latched": false,
+     "requirements": {
+      "passing": "73 -> 71",
+      "failing": "1 -> 3",
+      "uncovered": "5 -> 5",
+      "repaired": [],
+      "broken": [
+       "REQ-0039",
+       "REQ-0081"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.9608218063466233,
+     "edge_after": 0.9604556550040684,
+     "tp_before": 0.7552521008403361,
+     "tp_after": 0.7552521008403361,
+     "cells_fixed": 0,
+     "cells_broken": 18,
+     "port_fixed": {},
+     "port_broken": {
+      "dcram_we": 9,
+      "tag_we": 9
+     },
+     "own": {
+      "edge_before": 0.9641975308641976,
+      "edge_after": 0.9635241301907969,
+      "cells_fixed": 0,
+      "cells_broken": 12
+     }
+    },
+    {
+     "commit": 4,
+     "latched": true,
+     "requirements": {
+      "passing": "73 -> 74",
+      "failing": "1 -> 0",
+      "uncovered": "5 -> 5",
+      "repaired": [
+       "REQ-0078"
+      ],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.9608218063466233,
+     "edge_after": 0.9607811228641172,
+     "tp_before": 0.7552521008403361,
+     "tp_after": 0.7552521008403361,
+     "cells_fixed": 0,
+     "cells_broken": 395,
+     "port_fixed": {},
+     "port_broken": {
+      "dcram_we": 198,
+      "tag_we": 197
+     },
+     "own": {
+      "edge_before": 0.9641975308641976,
+      "edge_after": 0.9640852974186308,
+      "cells_fixed": 0,
+      "cells_broken": 147
+     }
+    },
+    {
+     "commit": 5,
+     "latched": true,
+     "requirements": {
+      "passing": "74 -> 74",
+      "failing": "0 -> 0",
+      "uncovered": "5 -> 5",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.9607811228641172,
+     "edge_after": 0.9607811228641172,
+     "tp_before": 0.7552521008403361,
+     "tp_after": 0.7552521008403361,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.9640852974186308,
+      "edge_after": 0.9640852974186308,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 6,
+     "latched": false,
+     "requirements": {
+      "passing": "74 -> 73",
+      "failing": "0 -> 1",
+      "uncovered": "5 -> 5",
+      "repaired": [],
+      "broken": [
+       "REQ-0051"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.9607811228641172,
+     "edge_after": 0.960740439381611,
+     "tp_before": 0.7552521008403361,
+     "tp_after": 0.7542016806722689,
+     "cells_fixed": 0,
+     "cells_broken": 2,
+     "port_fixed": {},
+     "port_broken": {
+      "biu_read": 2
+     },
+     "own": {
+      "edge_before": 0.9640852974186308,
+      "edge_after": 0.9640852974186308,
+      "cells_fixed": 0,
+      "cells_broken": 1
+     }
+    },
+    {
+     "commit": 7,
+     "latched": false,
+     "requirements": {
+      "passing": "74 -> 71",
+      "failing": "0 -> 3",
+      "uncovered": "5 -> 5",
+      "repaired": [],
+      "broken": [
+       "REQ-0015",
+       "REQ-0056",
+       "REQ-0075"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.9607811228641172,
+     "edge_after": 0.9602115541090317,
+     "tp_before": 0.7552521008403361,
+     "tp_after": 0.7552521008403361,
+     "cells_fixed": 1,
+     "cells_broken": 14,
+     "port_fixed": {
+      "biu_read": 1
+     },
+     "port_broken": {
+      "biu_read": 14
+     },
+     "own": {
+      "edge_before": 0.9640852974186308,
+      "edge_after": 0.9634118967452301,
+      "cells_fixed": 0,
+      "cells_broken": 6
+     }
+    },
+    {
+     "commit": 8,
+     "latched": false,
+     "requirements": {
+      "passing": "74 -> 74",
+      "failing": "0 -> 0",
+      "uncovered": "5 -> 5",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.9607811228641172,
+     "edge_after": 0.9607811228641172,
+     "tp_before": 0.7552521008403361,
+     "tp_after": 0.7552521008403361,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.9640852974186308,
+      "edge_after": 0.9640852974186308,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 9,
+     "latched": false,
+     "requirements": {
+      "passing": "74 -> 73",
+      "failing": "0 -> 1",
+      "uncovered": "5 -> 5",
+      "repaired": [],
+      "broken": [
+       "REQ-0051"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.9607811228641172,
+     "edge_after": 0.960740439381611,
+     "tp_before": 0.7552521008403361,
+     "tp_after": 0.7542016806722689,
+     "cells_fixed": 0,
+     "cells_broken": 2,
+     "port_fixed": {},
+     "port_broken": {
+      "biu_read": 2
+     },
+     "own": {
+      "edge_before": 0.9640852974186308,
+      "edge_after": 0.9640852974186308,
+      "cells_fixed": 0,
+      "cells_broken": 1
+     }
+    },
+    {
+     "commit": 10,
+     "latched": false,
+     "requirements": {
+      "passing": "74 -> 73",
+      "failing": "0 -> 1",
+      "uncovered": "5 -> 5",
+      "repaired": [],
+      "broken": [
+       "REQ-0051"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.9607811228641172,
+     "edge_after": 0.960740439381611,
+     "tp_before": 0.7552521008403361,
+     "tp_after": 0.7542016806722689,
+     "cells_fixed": 0,
+     "cells_broken": 2,
+     "port_fixed": {},
+     "port_broken": {
+      "biu_read": 2
+     },
+     "own": {
+      "edge_before": 0.9640852974186308,
+      "edge_after": 0.9640852974186308,
+      "cells_fixed": 0,
+      "cells_broken": 1
+     }
+    },
+    {
+     "commit": 11,
+     "latched": false,
+     "requirements": {
+      "passing": "74 -> 69",
+      "failing": "0 -> 5",
+      "uncovered": "5 -> 5",
+      "repaired": [],
+      "broken": [
+       "REQ-0015",
+       "REQ-0056",
+       "REQ-0072",
+       "REQ-0075",
+       "REQ-0096"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.9607811228641172,
+     "edge_after": 0.8609845402766477,
+     "tp_before": 0.7552521008403361,
+     "tp_after": 0.532563025210084,
+     "cells_fixed": 1,
+     "cells_broken": 2679,
+     "port_fixed": {
+      "biu_read": 1
+     },
+     "port_broken": {
+      "biu_read": 2554,
+      "tag_we": 88,
+      "dc_addr": 37
+     },
+     "own": {
+      "edge_before": 0.9640852974186308,
+      "edge_after": 0.8805836139169473,
+      "cells_fixed": 0,
+      "cells_broken": 814
+     }
+    },
+    {
+     "commit": 12,
+     "latched": false,
+     "requirements": {
+      "passing": "74 -> 73",
+      "failing": "0 -> 1",
+      "uncovered": "5 -> 5",
+      "repaired": [],
+      "broken": [
+       "REQ-0051"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.9607811228641172,
+     "edge_after": 0.9607811228641172,
+     "tp_before": 0.7552521008403361,
+     "tp_after": 0.7552521008403361,
+     "cells_fixed": 0,
+     "cells_broken": 1,
+     "port_fixed": {},
+     "port_broken": {
+      "biu_read": 1
+     },
+     "own": {
+      "edge_before": 0.9640852974186308,
+      "edge_after": 0.9640852974186308,
+      "cells_fixed": 0,
+      "cells_broken": 1
+     }
+    },
+    {
+     "commit": 13,
+     "latched": false,
+     "requirements": {
+      "passing": "74 -> 72",
+      "failing": "0 -> 2",
+      "uncovered": "5 -> 5",
+      "repaired": [],
+      "broken": [
+       "REQ-0008",
+       "REQ-0070"
+      ],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.9607811228641172,
+     "edge_after": 0.9607811228641172,
+     "tp_before": 0.7552521008403361,
+     "tp_after": 0.7552521008403361,
+     "cells_fixed": 0,
+     "cells_broken": 1,
+     "port_fixed": {},
+     "port_broken": {
+      "biu_read": 1
+     },
+     "own": {
+      "edge_before": 0.9640852974186308,
+      "edge_after": 0.9640852974186308,
+      "cells_fixed": 0,
+      "cells_broken": 1
+     }
+    }
+   ]
+  },
+  {
+   "module": "or1200_sb",
+   "run": "luna14",
+   "commits": [
+    {
+     "commit": 1,
+     "latched": true,
+     "requirements": {
+      "passing": "28 -> 65",
+      "failing": "6 -> 0",
+      "uncovered": "32 -> 1",
+      "repaired": [
+       "REQ-0004",
+       "REQ-0016",
+       "REQ-0036",
+       "REQ-0072",
+       "REQ-0073",
+       "REQ-0080"
+      ],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 1.0,
+     "edge_after": 0.40474295718605763,
+     "tp_before": 1.0,
+     "tp_after": 0.34103260869565216,
+     "cells_fixed": 0,
+     "cells_broken": 48774,
+     "port_fixed": {},
+     "port_broken": {
+      "dcsb_ack_o": 1006,
+      "sbbiu_adr_o": 8095,
+      "sbbiu_we_o": 7262,
+      "sbbiu_sel_o": 7650,
+      "sbbiu_dat_o": 7939,
+      "sbbiu_cyc_o": 6234,
+      "sbbiu_stb_o": 6358,
+      "sbbiu_cab_o": 2706,
+      "dcsb_err_o": 1524
+     },
+     "own": {
+      "edge_before": 1.0,
+      "edge_after": 0.3834559483222681,
+      "cells_fixed": 0,
+      "cells_broken": 15609
+     }
+    },
+    {
+     "commit": 2,
+     "latched": false,
+     "requirements": {
+      "passing": "65 -> 65",
+      "failing": "0 -> 0",
+      "uncovered": "1 -> 1",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.40474295718605763,
+     "edge_after": 0.40474295718605763,
+     "tp_before": 0.34103260869565216,
+     "tp_after": 0.34103260869565216,
+     "cells_fixed": 0,
+     "cells_broken": 0,
+     "port_fixed": {},
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.3834559483222681,
+      "edge_after": 0.3834559483222681,
+      "cells_fixed": 0,
+      "cells_broken": 0
+     }
+    },
+    {
+     "commit": 3,
+     "latched": true,
+     "requirements": {
+      "passing": "65 -> 65",
+      "failing": "0 -> 0",
+      "uncovered": "1 -> 1",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.40474295718605763,
+     "edge_after": 0.4453817178630166,
+     "tp_before": 0.34103260869565216,
+     "tp_after": 0.34103260869565216,
+     "cells_fixed": 8577,
+     "cells_broken": 7271,
+     "port_fixed": {
+      "sbbiu_sel_o": 3281,
+      "sbbiu_dat_o": 2612,
+      "sbbiu_adr_o": 2684
+     },
+     "port_broken": {
+      "sbbiu_dat_o": 2487,
+      "sbbiu_adr_o": 2327,
+      "sbbiu_sel_o": 2457
+     },
+     "own": {
+      "edge_before": 0.3834559483222681,
+      "edge_after": 0.4209581912793827,
+      "cells_fixed": 2548,
+      "cells_broken": 2329
+     }
+    },
+    {
+     "commit": 4,
+     "latched": true,
+     "requirements": {
+      "passing": "65 -> 65",
+      "failing": "0 -> 0",
+      "uncovered": "1 -> 1",
+      "repaired": [],
+      "broken": [],
+      "silenced": [],
+      "went_dark_from_passing": []
+     },
+     "rejected_before_sim": false,
+     "compiles": true,
+     "exact": true,
+     "edge_before": 0.4453817178630166,
+     "edge_after": 0.44580614356199266,
+     "tp_before": 0.34103260869565216,
+     "tp_after": 0.3423913043478261,
+     "cells_fixed": 49,
+     "cells_broken": 0,
+     "port_fixed": {
+      "sbbiu_dat_o": 8,
+      "sbbiu_adr_o": 8,
+      "sbbiu_cyc_o": 8,
+      "sbbiu_stb_o": 8,
+      "sbbiu_we_o": 8,
+      "sbbiu_sel_o": 8,
+      "dcsb_ack_o": 1
+     },
+     "port_broken": {},
+     "own": {
+      "edge_before": 0.4209581912793827,
+      "edge_after": 0.4213170644177283,
+      "cells_fixed": 12,
+      "cells_broken": 0
+     }
+    }
+   ]
+  }
+ ]
+}

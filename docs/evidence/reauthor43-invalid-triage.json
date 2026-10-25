@@ -1,0 +1,399 @@
+{
+ "REQ-0006": {
+  "verdict": "JUSTIFIED",
+  "class": "authoring",
+  "why": "trigger equates din=1 & scl_i=1 & sda_i=0 with 'expects SDA high' but never inspects sda_oen, which IS a contract port",
+  "text": "The module detects arbitration loss and signals it by asserting al when the controller expects SDA to be high but the filtered SDA is observed low or when an unexpected STOP occurs during an active command.",
+  "activation_inputs": {
+   "cmd": 1,
+   "nReset": 1,
+   "rst": 0,
+   "ena": 1
+  },
+  "observable": [
+   "al"
+  ],
+  "routed_through": [],
+  "observable_ports_in_contract": [
+   "al"
+  ],
+  "reviewer_ground": "off-target: The _write_arbitration_check trigger equates 'din==1 & scl_i==1 & sda_i==0' with 'the controller expects SDA high,' but that phrase requires the controller to have RELEASED SDA (sda_oen==1) and be waiting for the pull-up; the check never inspects sda_oen. As written it also fires when the controller is itself driving SDA low with SCL high -- exactly the shape of its own START condition (impl. detail 6/11) -- using din, a signal the spec never constrains outside a WRITE bit. The trigger needs to become: out_of_reset and din==1 and scl_i==1 and sda_i==0 and sda_oen==1 (SDA actually released by this controller, not driven by it), so the window only opens on a genuine 'released, expected high, observed low' row and excludes rows that are really a self-driven START. Rebuilding the window with that added condition is the fix; simply dropping the eventually() assertion would remove real coverage of the arbitration-check clause instead of fixing the scoping."
+ },
+ "REQ-0026": {
+  "verdict": "JUSTIFIED",
+  "class": "authoring",
+  "why": "cmd_ack on the same row that first satisfies the close; the reviewer says the window's OPEN and CLOSE are the right shape",
+  "text": "When the command FSM is in the idle state, the controller decodes the cmd input as one of the supported commands I2C_CMD_START, I2C_CMD_STOP, I2C_CMD_WRITE, or I2C_CMD_READ, and any unsupported or idle value leaves the FSM in the idle state.",
+  "activation_inputs": {},
+  "observable": [
+   "cmd_ack",
+   "busy",
+   "scl_oen",
+   "sda_oen"
+  ],
+  "routed_through": [],
+  "observable_ports_in_contract": [
+   "busy",
+   "cmd_ack",
+   "scl_oen",
+   "sda_oen"
+  ],
+  "reviewer_ground": "off-target: The unlicensed False path: cmd_ack==1 on the SAME row that first satisfies the closing condition (busy=1 / scl_oen=0 / sda_oen=0) -- concretely, a READ or a WRITE-of-one whose only departure sign is the sequence's final SCL-low phase, which a correct FSM may register in the same transition that also asserts cmd_ack and returns to idle. The window's OPEN and CLOSE are the right transcription of normalized.activation.until; what needs to change is the span the 'cmd_ack must stay 0' assertion runs over -- it must stop short of the closing row, not run through it (e.g. evaluate over the rows strictly between open and close, or use the `until(w, cmd_ack==0, closes)` operator instead of `throughout(..., after_activation=True)`, since `until` is documented to not require `holds` on the row its `release` condition fires). As written, the trigger/window are fine; only the row range the assertion is checked over is too wide by exactly one row at the far end."
+ },
+ "REQ-0030": {
+  "verdict": "JUSTIFIED",
+  "class": "authoring",
+  "why": "window closes on nReset=0/rst=1 and strong=True turns that into a violation; the text never mentions reset",
+  "text": "The arbitration-lost output al is asserted when a STOP condition is detected on the filtered bus while the bit-level controller is executing a command and the detected STOP was not requested by this controller.",
+  "activation_inputs": {
+   "nReset": 1,
+   "rst": 0,
+   "ena": 1,
+   "cmd": 1
+  },
+  "observable": [
+   "al"
+  ],
+  "routed_through": [],
+  "observable_ports_in_contract": [
+   "al"
+  ],
+  "reviewer_ground": "off-target: The unlicensed False path is: a window opens on a genuine filtered-STOP edge and then closes via nReset==0 or rst==1 (reset intervening) before al ever reached 1, and strong=True converts that into a violation exactly as if the command had completed via cmd_ack without al. The requirement's text never addresses reset, and the spec explicitly has reset clear al, so this path needs its own treatment rather than being carried by the same strong=True eventually as the cmd_ack/al closes: split the folds so `strong=True` still applies when a window closes via cmd_ack or al (the two closes the obligation actually governs), but a window that closes via nReset==0 or rst==1 is reported as None/inconclusive (or simply excluded from the strong fold) instead of False -- the trigger's own qualifiers already keep windows from opening while in reset, but the closing side needs the matching exemption for a reset that arrives mid-window."
+ },
+ "REQ-0063": {
+  "verdict": "JUSTIFIED",
+  "class": "authoring",
+  "why": "al is sticky, so a previous command's al closes this STOP's window instantly; should close on a RISE of al",
+  "text": "The STOP command sequence releases the SCL line so the external pull-up can drive it high by deasserting the SCL open-drain output-enable (scl_oen).",
+  "activation_inputs": {
+   "cmd": 2,
+   "ena": 1,
+   "nReset": 1,
+   "rst": 0
+  },
+  "observable": [
+   "scl_oen"
+  ],
+  "routed_through": [],
+  "observable_ports_in_contract": [
+   "scl_oen"
+  ],
+  "reviewer_ground": "off-target: The al==1 alternative inside `closes` is unlicensed as written: it fires on any row where al happens to read 1, including one that was already sticky-high before this STOP's own activation row (al is cleared only by reset per the specification, so it can persist across unrelated, later commands). That lets the window close instantly, before the STOP sequence's own release phase can run, convicting a design whose SCL release would have appeared later, just outside the truncated window -- a False path REQ-0063's text (which says nothing about arbitration) does not license. The closing condition needs to become 'al is newly asserted because of THIS STOP attempt', not 'al reads 1' -- e.g. gate it on al rising within the window (comparing against al's value at, or immediately before, the window's own activation row, or using an edges(trace,'al','rise') set restricted to rows inside the window) so a pre-existing/stale al from an earlier, unrelated command no longer terminates the window before the design has had any chance to release scl_oen."
+ },
+ "REQ-0067": {
+  "verdict": "JUSTIFIED",
+  "class": "authoring",
+  "why": "tautology - can never return False; opens on scl_oen rise, closes on its fall, asserts scl_oen==1 between",
+  "text": "The READ command sequence releases SCL to provide the sampling window and then drives SCL low again after the sample window ends.",
+  "activation_inputs": {
+   "cmd": 8,
+   "ena": 1
+  },
+  "observable": [
+   "scl_oen"
+  ],
+  "routed_through": [],
+  "observable_ports_in_contract": [
+   "scl_oen"
+  ],
+  "reviewer_ground": "off-target: There is no unlicensed False path -- the defect is the opposite: the check can never return False at all, because 'closes' (scl_oen falls) and the asserted effect (scl_oen==1 throughout) are two faces of the identical signal transition that also defines 'opens' (scl_oen rises just after having been driven low). Between a rise and the very next fall of the same boolean signal, 'it stayed 1' is guaranteed by construction, so throughout() can never fail -- the check reduces to 'while scl_oen is released, is it released', which convicts nothing and confirms nothing about the design. To actually decide the requirement, the window's close (or the asserted effect) needs to be tied to something independent of the very transition being asserted -- e.g. closing the window on completion of the READ sequence via an independent marker (such as the command finishing, or an explicit bound on how long the release may persist) rather than on 'scl_oen fell', and/or asserting a fact that isn't automatically implied by the window's own boundaries. As written, the only content the check has is whether a closing fall exists before the trace ends (handled, conservatively and correctly, as None when it does not) -- the throughout() clause contributes nothing and should not be mistaken for a check on the sampling-window behavior."
+ },
+ "REQ-0071": {
+  "verdict": "JUSTIFIED",
+  "class": "authoring",
+  "why": "closes on al/cmd_ack instead of on the WRITE high phase's own end",
+  "text": "During the WRITE bit high phase the controller must release SCL by deasserting scl_oen high so the external pull-up can drive the SCL line high.",
+  "activation_inputs": {
+   "nReset": 1,
+   "rst": 0,
+   "ena": 1,
+   "cmd": 4
+  },
+  "observable": [
+   "scl_oen"
+  ],
+  "routed_through": [],
+  "observable_ports_in_contract": [
+   "scl_oen"
+  ],
+  "reviewer_ground": "off-target: The unlicensed False path is any row where scl_oen==0 after the WRITE bit high phase has already legitimately ended (its own fall back to 0, i.e. the design has moved on to driving SCL low again per impl. detail 14) but before al or cmd_ack has fired -- REQ-0071 says nothing about that interval. The window's closing condition needs to stop being al==1/cmd_ack==1 and instead end where the high phase itself ends: include scl_oen's own subsequent fall as (at least) one of the closing alternatives, matching normalized.activation.until's own list ([{scl_oen:0},{al:1},{cmd_ack:1}]), so the obligation 'scl_oen==1' is only ever asserted up to the point the phase itself closes, not into the unrelated settling period before cmd_ack. That will make this particular slice of the check weak/near-tautological (scl_oen's own fall is how the phase's end is observed at all), but weak is not disqualifying here -- reaching past the phase's own boundary into cmd_ack's territory is."
+ },
+ "REQ-0093": {
+  "verdict": "JUSTIFIED",
+  "class": "authoring",
+  "why": "reset asserted inside the ena==0 window counted as an FSM-timing violation",
+  "text": "When the core enable input ena is low, the module reloads the internal counter cnt from clk_cnt and normal command-FSM bit timing does not progress.",
+  "activation_inputs": {
+   "ena": 0
+  },
+  "observable": [
+   "cmd_ack",
+   "scl_oen",
+   "sda_oen"
+  ],
+  "routed_through": [],
+  "observable_ports_in_contract": [
+   "cmd_ack",
+   "scl_oen",
+   "sda_oen"
+  ],
+  "reviewer_ground": "off-target: The unlicensed False path is: scl_oen or sda_oen changes value during the ena==0 window because nReset or rst asserted inside that same span (a legitimate, textually-required reset release), not because normal FSM bit timing resumed. No sentence in REQ-0093 condemns a reset-driven change to these outputs -- the requirement is silent about reset entirely. The window's trigger needs to stop treating the whole ena==0..ena==1 span as uniformly governed by REQ-0093: it should exclude (or split around) any sub-span where nReset==0 or rst==1 holds, e.g. by adding nReset==1 and rst==0 to the window's activation/closing conditions the way the sibling ena-gating requirements in this same module already do, so a reset pulse ends or interrupts the window instead of being examined by the stable()/throughout() assertions built for ena's own effect."
+ },
+ "REQ-0095": {
+  "verdict": "JUSTIFIED",
+  "class": "authoring",
+  "why": "any(sda_i==0) - one raw sample demands al, exactly the glitch the majority filter must suppress",
+  "text": "The module shall enable arbitration checking during the stable high phase of a WRITE bit by sampling the SDA line for the expected released-high level.",
+  "activation_inputs": {
+   "nReset": 1,
+   "rst": 0,
+   "ena": 1,
+   "cmd": 4,
+   "din": 1,
+   "scl_i": 1
+  },
+  "observable": [
+   "al",
+   "sda_oen"
+  ],
+  "routed_through": [],
+  "observable_ports_in_contract": [
+   "al",
+   "sda_oen"
+  ],
+  "reviewer_ground": "off-target: The unlicensed False path is the eventually(al==1, strong=True) obligation fired by sda_low_seen = any(sda_i==0 for r in w.rows) -- a single momentary raw sda_i==0 sample anywhere in the window is enough to demand al, even though such a brief dip is exactly the 'short glitch' the specification says must not create an arbitration event, since the actual check is against the filtered SDA, which a correct majority filter can leave high despite a one-row raw dip. The trigger for the al-obligation branch needs to become 'sda_i is held at 0 for every row of the window' (continuous, not merely observed once), mirroring the sibling arbitration-check oracle in this same suite; when sda_i is neither continuously 0 nor never 0 for the window (an intermittent, ambiguous case), the check should return None for that window rather than obligating or forbidding al, since the filtered outcome then depends on the module's own unstated filter timing."
+ },
+ "REQ-0097": {
+  "verdict": "JUSTIFIED",
+  "class": "authoring",
+  "why": "raw sda_i rise used where the requirement says 'filtered STOP'",
+  "text": "The module shall assert the arbitration-lost output al when a filtered STOP condition is detected while a non-STOP command is active.",
+  "activation_inputs": {
+   "nReset": 1,
+   "rst": 0
+  },
+  "observable": [
+   "al"
+  ],
+  "routed_through": [],
+  "observable_ports_in_contract": [
+   "al"
+  ],
+  "reviewer_ground": "off-target: The False path -- al never asserted before the window closes, after a raw sda_i rise was seen while scl_i==1 -- is unlicensed whenever that raw rise is a short glitch the majority filter legitimately suppresses; nothing in REQ-0097 condemns withholding al for a transient that never became a filtered STOP, and the specification's own corner_cases and test_plan say the opposite is required. The check's inner trigger needs to stop treating a bare raw sda_i rise as proof a filtered STOP occurred: either corroborate it against a signal the filter itself already gates (e.g. require the same busy flag to fall from 1 to 0 inside the window, since busy's own clear is driven by the identical filtered-STOP detection this requirement piggybacks on), or apply the same kind of majority/timing reasoning REQ-0046's check used (no filtered decision can complete faster than a filter-sample period) before treating a raw sda_i rise as the qualifying event. Simply deleting the strong obligation would just make the check weaker without fixing the mismatch -- the window needs to be rebuilt so it only opens once evidence of an actually-filtered STOP is present, not merely a candidate raw one."
+ },
+ "REQ-0025": {
+  "verdict": "NOT_JUSTIFIED",
+  "class": "not-an-obligation",
+  "why": "a port definition; activation.inputs, opens_on and until are all empty",
+  "text": "The cmd[3:0] input is the bit-level command provided by the byte-level controller.",
+  "activation_inputs": {},
+  "observable": [
+   "cmd_ack",
+   "scl_oen",
+   "sda_oen"
+  ],
+  "routed_through": [
+   "REQ-0016",
+   "REQ-0056",
+   "REQ-0104"
+  ],
+  "observable_ports_in_contract": [
+   "cmd_ack",
+   "scl_oen",
+   "sda_oen"
+  ],
+  "reviewer_ground": "off-target: The unlicensed False path is: opens() accepts ANY cmd value change under normal ena/reset conditions, including one that happens while the FSM is still mid-sequence on an earlier, already-validly-issued command (cmd is only decoded in idle, per the spec and per every route's 'when' clause, which all require the command to be presented 'while ... the FSM is idle'). Such a stray change can pair, via until=closes, with the cmd_ack that completes that unrelated in-flight command, over a tail span that contains no further scl_oen/sda_oen edges (the real toggling already happened earlier in that command's execution) -- convicting a perfectly correct design. The trigger needs to become: only treat a cmd change as 'presenting a command' when it happens at a point the FSM is actually idle and available to decode it -- concretely, only allow a new open once the previously opened window (if any) has already closed, i.e. build non-overlapping/non-nested windows (skip any candidate open row that falls inside an already-open, not-yet-closed window) rather than treating every cmd-change edge as an independent trigger. Simply deleting the False branch would remove the accusation but also the check's only teeth against a genuinely disconnected cmd_ack; the fix is to rebuild the window so it only opens where the requirement's routes say a command is actually presented (idle, supported value), not on every raw cmd edge."
+ },
+ "REQ-0080": {
+  "verdict": "NOT_JUSTIFIED",
+  "class": "not-an-obligation",
+  "why": "antecedent stripped during extraction; the reviewer had to reread the spec_span's paragraph to find it. sda_chk is internal",
+  "text": "The controller disables arbitration checking.",
+  "activation_inputs": {
+   "din": 0,
+   "ena": 1
+  },
+  "observable": [
+   "al",
+   "sda_oen"
+  ],
+  "routed_through": [],
+  "observable_ports_in_contract": [
+   "al",
+   "sda_oen"
+  ],
+  "reviewer_ground": "off-target: The TRIGGER needs to become 'reset is asserted' (nReset==0 or rst==1), matching the Processing Flow reset paragraph this requirement's spec_span is quoted from, not 'din==0 and ena==1' (a WRITE bit's driven-low phase, which is a different corner case entirely and never mentions reset). Because 'arbitration checking' and its enabling signal (sda_chk) are internal and not in declared_ports, the EFFECT has to be decided at whatever observable port carries reset's disabling of arbitration -- e.g. that al is not (spuriously) asserted due to arbitration evaluation while reset holds, or during the reset-to-idle transition before any new WRITE bit's own arbitration-check phase begins -- rather than at sda_oen==0 during an ordinary WRITE-0 bit, which is REQ-0080's neighbour's territory, not its own."
+ },
+ "REQ-0086": {
+  "verdict": "NOT_JUSTIFIED",
+  "class": "not-an-obligation",
+  "why": "descriptive; the reviewer says the normative sentence belongs to REQ-0087. slave_wait is internal",
+  "text": "The slave_wait condition indicates that another bus participant is holding the SCL line low.",
+  "activation_inputs": {
+   "scl_i": 0,
+   "ena": 1
+  },
+  "observable": [
+   "cmd_ack",
+   "scl_oen"
+  ],
+  "routed_through": [
+   "REQ-0087"
+  ],
+  "observable_ports_in_contract": [
+   "cmd_ack",
+   "scl_oen"
+  ],
+  "reviewer_ground": "off-target: The unlicensed False path is: at a row where scl_oen=1, scl_i=0 and ena=1 (slave_wait's defining condition), cmd_ack pulses. REQ-0086's own text never condemns this -- it only says the condition 'indicates' another participant holds SCL low, with no claim about cmd_ack or FSM advancement; the sentence that actually forbids the pulse belongs to REQ-0087. Fixing this means finding an effect that is REQ-0086's own -- something that would distinguish 'the design's slave_wait fires on the right condition' from 'whatever the design calls slave_wait successfully pauses the FSM' -- rather than reusing REQ-0087's freeze-of-cmd_ack as the assertion. Since slave_wait itself is internal and its only externally visible consequence the specification supplies IS the FSM-pause REQ-0087 already claims, there may be no behavioral content left for REQ-0086 to test independently of REQ-0087; at minimum the trigger/assertion pairing would need to change so it no longer reduces to REQ-0087's own clause under this uid."
+ },
+ "REQ-0008": {
+  "verdict": "NOT_JUSTIFIED",
+  "class": "internal-subject",
+  "why": "timing counter reload - internal; routed through REQ-0053's scl_oen, which the route says MAY move, not must",
+  "text": "The module performs multi-master clock synchronization by detecting a falling edge on the filtered SCL input while the module has released SCL and by reloading the timing counter to align the local low-period timing with the shared bus clock.",
+  "activation_inputs": {
+   "nReset": 1,
+   "rst": 0,
+   "ena": 1
+  },
+  "observable": [
+   "scl_oen"
+  ],
+  "routed_through": [
+   "REQ-0053"
+  ],
+  "observable_ports_in_contract": [
+   "scl_oen"
+  ],
+  "reviewer_ground": "off-target: The False path is: the row after a qualifying scl_i fall shows the same scl_oen value as the fall row itself. This is unlicensed because the route only says scl_oen MAY show the FSM-allowed transition there ('for example'), not that it must -- and a compliant design legitimately produces no scl_oen change whenever the FSM is in a wait-for-SCL-high state and the falling edge (by definition, SCL still not observed high) leaves that wait condition unmet, so clk_en re-enters the same state. The check's assertion needs to stop treating 'no scl_oen change' as a violation and instead return None there (insufficient/ambiguous evidence through this particular port), reserving False for some independently-licensed signature that the reload did not occur -- which this route, as given, does not actually provide; the trigger itself does not need to change."
+ },
+ "REQ-0021": {
+  "verdict": "NOT_JUSTIFIED",
+  "class": "internal-subject",
+  "why": "clock-divider counter reload - internal; routed through REQ-0102. Ground also invokes the invented cmd encodings",
+  "text": "When the ena input is low, the module reloads the internal clock divider counter from the clk_cnt prescale value.",
+  "activation_inputs": {
+   "ena": 0
+  },
+  "observable": [
+   "scl_oen"
+  ],
+  "routed_through": [
+   "REQ-0102"
+  ],
+  "observable_ports_in_contract": [
+   "scl_oen"
+  ],
+  "reviewer_ground": "off-target: The unlicensed False path is: ena falls 1->0 with nReset=1, rst=0, the FSM previously idle, and cmd holding a nonzero value that is NOT one of the recognized encodings (I2C_CMD_START/STOP/WRITE/READ) -- i.e. an 'unsupported' command per the spec's own wording, distinct from 'idle'. On that row the FSM correctly stays idle and scl_oen never moves, yet the reload this requirement describes can still have happened; the check nonetheless records a miss and returns False, convicting a compliant design. The check's cmd filter needs to change from excluding only cmd==0 to positively testing that cmd equals one of the actually-supported command encodings, so the trigger window only opens where the route's 'a supported bit-level cmd is present' precondition truly holds."
+ },
+ "REQ-0022": {
+  "verdict": "NOT_JUSTIFIED",
+  "class": "internal-subject",
+  "why": "input filter counter - internal; the reviewer's ground is that the proxy cannot distinguish REQ-0022 from REQ-0020",
+  "text": "When the ena input is low, the module resets the input filter counter.",
+  "activation_inputs": {
+   "ena": 0
+  },
+  "observable": [
+   "cmd_ack",
+   "dout"
+  ],
+  "routed_through": [
+   "REQ-0020",
+   "REQ-0023"
+  ],
+  "observable_ports_in_contract": [
+   "cmd_ack",
+   "dout"
+  ],
+  "reviewer_ground": "off-target: The False path (dout changing during an ena==0 window with a scl_i/sda_i transition present) is not unlicensed in the sense of convicting the wrong situation -- it is unlicensed as a test of THIS requirement because nothing in the check, and nothing in the route's 'when' field, distinguishes 'dout froze because the input filter counter was held reset' (REQ-0022) from 'dout froze because REQ-0020's broader ena-gating held it, by some other means, with the filter counter left running'. A design of the second kind passes unchanged. Fixing this needs a `when`/condition that actually isolates REQ-0022's own mechanism from REQ-0020's umbrella claim -- for example cross-checking against evidence that the filter/majority-vote pipeline specifically failed to advance (if any such proxy is reachable through another route) rather than relying solely on dout's final captured value, which REQ-0020 already fully explains on its own the current check cannot tell REQ-0022 apart from REQ-0020 with the observable it uses."
+ },
+ "REQ-0043": {
+  "verdict": "NOT_JUSTIFIED",
+  "class": "internal-subject",
+  "why": "timing counter reload/restart - internal; text obliges no particular output transition",
+  "text": "The module shall reload its internal timing counter from clk_cnt and restart its low-period timing when scl_sync is asserted so that the module synchronizes its low-period timing to the shared bus clock.",
+  "activation_inputs": {
+   "nReset": 1,
+   "rst": 0,
+   "ena": 1
+  },
+  "observable": [
+   "cmd_ack",
+   "scl_oen"
+  ],
+  "routed_through": [
+   "REQ-0053"
+  ],
+  "observable_ports_in_contract": [
+   "cmd_ack",
+   "scl_oen"
+  ],
+  "reviewer_ground": "off-target: The False path is: window opens correctly on the scl_sync proxy, but scl_oen never differs from its trigger-row value before the window closes (by scl_i rising again, al, nReset, or -- via strong=True -- the trace simply running out). Neither sub-case is licensed by REQ-0043's text, which only obliges an internal counter reload/restart, not any particular output transition, and certainly not one that must appear before the OTHER bus participant releases SCL again -- a correct reload's whole purpose is to make this module's own wait longer, so it is entirely normal for scl_oen to still read 1 when that external release happens. To fix this without abandoning the accepted scl_oen/REQ-0053 route, the window/trigger needs rebuilding around the route's own 'when': check specifically at the row immediately following the scl_sync-proxy trigger (not an open eventually-search extending to the bus's own later release), and treat a trigger for which that immediate next row is unavailable, or for which no FSM-driven change is expected there because the FSM's next phase does not happen to alter scl_oen, as inconclusive (None) rather than False -- e.g. by also allowing the alternate cmd_ack witness the same route offers before declaring a miss, and by dropping the strong=True treatment of a window that never closes, since an incomplete trace is absence of evidence, not evidence of a violation."
+ },
+ "REQ-0046": {
+  "verdict": "NOT_JUSTIFIED",
+  "class": "internal-subject",
+  "why": "sSCL/sSDA majority-filter outputs - internal; routed through REQ-0047's busy",
+  "text": "Majority voting over the three-sample histories must produce the filtered signals sSCL and sSDA so that short glitches on scl_i and sda_i are suppressed in the internal bus view.",
+  "activation_inputs": {
+   "nReset": 1,
+   "rst": 0,
+   "ena": 1
+  },
+  "observable": [
+   "al",
+   "busy",
+   "dout"
+  ],
+  "routed_through": [
+   "REQ-0047",
+   "REQ-0051",
+   "REQ-0096"
+  ],
+  "observable_ports_in_contract": [
+   "al",
+   "busy",
+   "dout"
+  ],
+  "reviewer_ground": "off-target: The unlicensed False path: a legitimate busy transition, correctly delayed by roughly the true filter latency from its actual causal excitation, lands within `period` edges of a DIFFERENT, unrelated scl_i/sda_i toggle -- e.g. a second, distinct glitch or bus event the test plan injects shortly after the one that actually forms the majority, or the DUT's own next protocol-driven toggle -- and the check cannot tell that apart from 'busy reacted too fast to this toggle.' Fixing it needs the trigger/assertion pair to attribute a given busy change to the excite event that is actually its causal antecedent (e.g. the most recent excite event whose own required filter latency lines up with when busy actually changed) before demanding the minimum-latency gap from it, or to close/invalidate a window as soon as some other, later excite event intervenes before the minimum latency has elapsed, so the assertion is only ever evaluated against the one excitation it is entitled to judge."
+ },
+ "REQ-0066": {
+  "verdict": "NOT_JUSTIFIED",
+  "class": "invented-cmd-encoding",
+  "why": "text says READ; activation pins cmd=4, which is WRITE in i2c_master_defines.v and elsewhere in this pipeline's own normalization",
+  "text": "The READ command sequence releases the SDA line so that the external slave can drive the data bit.",
+  "activation_inputs": {
+   "cmd": 4,
+   "ena": 1
+  },
+  "observable": [
+   "sda_oen"
+  ],
+  "routed_through": [],
+  "observable_ports_in_contract": [
+   "sda_oen"
+  ],
+  "reviewer_ground": "off-target: The False path -- SDA never observed released within a window opened by cmd==4 -- is unlicensed whenever that window is actually a WRITE-of-zero bit (which this specification explicitly permits to keep SDA driven low throughout), because cmd==4 identifies WRITE elsewhere in this same pipeline's own normalization, not READ. The check's TRIGGER needs to open on whatever this module's actual READ encoding is (cmd==8, going by the one-hot pattern START=1/STOP=2/WRITE=4 already established for this module) rather than cmd==4; the assertion itself (eventually sda_oen==1, strong=True, closing on scl_oen==0/cmd_ack==1/al==1) is fine and does not need to change once it is examining the right command."
+ },
+ "REQ-0121": {
+  "verdict": "NOT_JUSTIFIED",
+  "class": "invented-cmd-encoding",
+  "why": "text says WRITE; activation pins cmd=1, which REQ-0057/REQ-0063 establish as START",
+  "text": "The FSM pulses cmd_ack for one system clock cycle to acknowledge completion of the WRITE command.",
+  "activation_inputs": {
+   "nReset": 1,
+   "rst": 0,
+   "ena": 1,
+   "cmd": 1
+  },
+  "observable": [
+   "cmd_ack"
+  ],
+  "routed_through": [],
+  "observable_ports_in_contract": [
+   "cmd_ack"
+  ],
+  "reviewer_ground": "off-target: qualifies() uses cmd==1, which this same specification's own self-consistent normalized blocks (REQ-0057's START, REQ-0063's STOP) establish as the START encoding, not WRITE. The TRIGGER must instead select cmd_ack rows where the command that just completed is WRITE -- i.e. cmd must be set to WRITE's actual encoding (not 1, and not any value already claimed by START/STOP/NOP in this spec's normalization) -- so that `pulses` is built from genuine WRITE completions instead of START completions the requirement never mentions."
+ }
+}

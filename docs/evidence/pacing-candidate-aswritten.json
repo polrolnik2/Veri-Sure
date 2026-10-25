@@ -1,0 +1,359 @@
+{
+ "failing": [
+  {
+   "req_uid": "REQ-0003",
+   "verdict": "FAILS",
+   "requirement": "The module performs single-bit WRITE cycles by driving or releasing SDA according to the transmitted bit and toggling SCL through the prescribed bit-timing phases.",
+   "check_said": "no WRITE bit cycle observed in this command window",
+   "testpoint": "TP-0007",
+   "ports": [
+    "al",
+    "cmd",
+    "cmd_ack",
+    "din",
+    "ena",
+    "nReset",
+    "rst",
+    "scl_oen",
+    "sda_oen"
+   ]
+  },
+  {
+   "req_uid": "REQ-0006",
+   "verdict": "FAILS",
+   "requirement": "The module detects arbitration loss and signals it by asserting al when the controller expects SDA to be high but the filtered SDA is observed low or when an unexpected STOP occurs during an active co",
+   "check_said": "the expected response never occurred in the window opening at edge 133",
+   "testpoint": "TP-0014",
+   "ports": [
+    "al",
+    "cmd",
+    "cmd_ack",
+    "din",
+    "ena",
+    "nReset",
+    "rst",
+    "scl_i",
+    "sda_i"
+   ]
+  },
+  {
+   "req_uid": "REQ-0027",
+   "verdict": "FAILS",
+   "requirement": "The busy output is set when a filtered START condition is detected and is cleared when a filtered STOP condition is detected.",
+   "check_said": "busy did not assert after START (window opened at 23)",
+   "testpoint": "TP-0066",
+   "ports": [
+    "busy",
+    "ena",
+    "nReset",
+    "rst",
+    "scl_i",
+    "sda_i"
+   ]
+  },
+  {
+   "req_uid": "REQ-0029",
+   "verdict": "FAILS",
+   "requirement": "The arbitration-lost output al is asserted when the controller releases SDA (releases the open-drain so the line should be high) but the filtered SDA input remains low during arbitration checking.",
+   "check_said": "the expected response never occurred in the window opening at edge 9",
+   "testpoint": "TP-0072",
+   "ports": [
+    "al",
+    "cmd",
+    "cmd_ack",
+    "din",
+    "ena",
+    "sda_i",
+    "sda_oen"
+   ]
+  },
+  {
+   "req_uid": "REQ-0042",
+   "verdict": "FAILS",
+   "requirement": "The module shall assert scl_sync when a falling edge occurs on the filtered SCL input while scl_oen indicates that the module has released SCL high.",
+   "check_said": "the invariant broke at edge 6, in the window opening at edge 5",
+   "testpoint": "TP-0098",
+   "ports": [
+    "scl_i",
+    "scl_oen"
+   ]
+  },
+  {
+   "req_uid": "REQ-0048",
+   "verdict": "FAILS",
+   "requirement": "The module detects an I2C STOP condition when the filtered SDA transitions from low to high while the filtered SCL is high, i.e. when sSDA & ~dSDA & sSCL evaluates true.",
+   "check_said": "the expected response never occurred in the window opening at edge 8",
+   "testpoint": "TP-0114",
+   "ports": [
+    "busy",
+    "ena",
+    "nReset",
+    "rst",
+    "scl_i",
+    "sda_i"
+   ]
+  },
+  {
+   "req_uid": "REQ-0062",
+   "verdict": "FAILS",
+   "requirement": "The STOP command sequence drives the SDA line low by asserting the SDA open-drain output-enable active (sda_oen).",
+   "check_said": "the expected response never occurred in the window opening at edge 2",
+   "testpoint": "TP-0149",
+   "ports": [
+    "al",
+    "cmd",
+    "cmd_ack",
+    "ena",
+    "nReset",
+    "rst",
+    "sda_oen"
+   ]
+  },
+  {
+   "req_uid": "REQ-0064",
+   "verdict": "FAILS",
+   "requirement": "The STOP command sequence releases the SDA line while the SCL line is high on the bus to create a valid I2C STOP condition.",
+   "check_said": "the expected response never occurred in the window opening at edge 4",
+   "testpoint": "TP-0153",
+   "ports": [
+    "cmd",
+    "cmd_ack",
+    "ena",
+    "scl_i",
+    "sda_oen"
+   ]
+  },
+  {
+   "req_uid": "REQ-0088",
+   "verdict": "FAILS",
+   "requirement": "If the external SCL line falls while this master has released it high, the module asserts scl_sync, reloads the timing counter from clk_cnt, and synchronizes its local low-period timing to the shared ",
+   "check_said": "no FSM-driven change to scl_oen observed after the falling SCL event",
+   "testpoint": "TP-0208",
+   "ports": [
+    "scl_i",
+    "scl_oen"
+   ]
+  },
+  {
+   "req_uid": "REQ-0090",
+   "verdict": "FAILS",
+   "requirement": "The module loads the internal counter cnt from the prescale input clk_cnt and decrements cnt on each rising edge of clk.",
+   "check_said": "scl_oen changed on consecutive distinct clock rows while clk_cnt=3",
+   "testpoint": "TP-0212",
+   "ports": [
+    "clk_cnt",
+    "ena",
+    "nReset",
+    "rst",
+    "scl_oen"
+   ]
+  },
+  {
+   "req_uid": "REQ-0095",
+   "verdict": "FAILS",
+   "requirement": "The module shall enable arbitration checking during the stable high phase of a WRITE bit by sampling the SDA line for the expected released-high level.",
+   "check_said": "the expected response never occurred in the window opening at edge 6",
+   "testpoint": "TP-0223",
+   "ports": [
+    "al",
+    "cmd",
+    "cmd_ack",
+    "din",
+    "ena",
+    "nReset",
+    "rst",
+    "scl_i",
+    "scl_oen",
+    "sda_i"
+   ]
+  },
+  {
+   "req_uid": "REQ-0096",
+   "verdict": "FAILS",
+   "requirement": "The module shall assert the arbitration-lost output al whenever arbitration checking expects SDA to be released high but the filtered SDA input is observed low.",
+   "check_said": "the expected response never occurred in the window opening at edge 10",
+   "testpoint": "TP-0225",
+   "ports": [
+    "al",
+    "cmd",
+    "cmd_ack",
+    "din",
+    "ena",
+    "nReset",
+    "rst",
+    "sda_i",
+    "sda_oen"
+   ]
+  },
+  {
+   "req_uid": "REQ-0099",
+   "verdict": "FAILS",
+   "requirement": "The module performs read-data sampling from the filtered SDA line.",
+   "check_said": "the expected response never occurred, and the window opening at edge 6 ran to the end of trace -- the obligation was never discharged",
+   "testpoint": "TP-0232",
+   "ports": [
+    "al",
+    "cmd",
+    "cmd_ack",
+    "dout",
+    "ena",
+    "nReset",
+    "rst",
+    "scl_i",
+    "sda_i"
+   ]
+  },
+  {
+   "req_uid": "REQ-0101",
+   "verdict": "FAILS",
+   "requirement": "During READ commands, the module presents the sampled SDA bit on dout for the byte-level controller to use as the received data bit.",
+   "check_said": "dout never reflected the sampled SDA value (1) after the SCL-high sampling phase began at edge 6",
+   "testpoint": "TP-0235",
+   "ports": [
+    "al",
+    "cmd",
+    "cmd_ack",
+    "dout",
+    "ena",
+    "scl_i",
+    "scl_oen",
+    "sda_i"
+   ]
+  },
+  {
+   "req_uid": "REQ-0102",
+   "verdict": "FAILS",
+   "requirement": "The command finite-state machine remains in the idle state until a valid bit-level command is present on cmd and the internal clk_en timing tick permits the FSM to advance.",
+   "check_said": "the FSM left the idle-observable state (scl_oen=0, sda_oen=1, busy=0) with neither that row nor the one before it showing a nonzero cmd under ena=1, nReset=1, r",
+   "testpoint": "TP-0238",
+   "ports": [
+    "busy",
+    "cmd",
+    "ena",
+    "nReset",
+    "rst",
+    "scl_oen",
+    "sda_oen"
+   ]
+  },
+  {
+   "req_uid": "REQ-0105",
+   "verdict": "FAILS",
+   "requirement": "The FSM ensures the SDA line is driven low by asserting the SDA open-drain output enable low.",
+   "check_said": "the expected response never occurred in the window opening at edge 2",
+   "testpoint": "TP-0243",
+   "ports": [
+    "al",
+    "cmd",
+    "cmd_ack",
+    "ena",
+    "sda_oen"
+   ]
+  },
+  {
+   "req_uid": "REQ-0110",
+   "verdict": "FAILS",
+   "requirement": "The bit-level FSM releases SDA by driving the sda_oen output to the inactive (released/high) level so the external slave can drive the data bit.",
+   "check_said": "the invariant broke at edge 15, in the window opening at edge 1",
+   "testpoint": "TP-0253",
+   "ports": [
+    "al",
+    "cmd",
+    "cmd_ack",
+    "ena",
+    "nReset",
+    "rst",
+    "sda_oen"
+   ]
+  },
+  {
+   "req_uid": "REQ-0114",
+   "verdict": "FAILS",
+   "requirement": "The FSM drives or releases the SDA line according to the value presented on the din input during a WRITE command.",
+   "check_said": "the invariant broke at edge 4, in the window opening at edge 1",
+   "testpoint": "TP-0261",
+   "ports": [
+    "al",
+    "cmd",
+    "cmd_ack",
+    "din",
+    "ena",
+    "nReset",
+    "rst",
+    "scl_i",
+    "sda_oen"
+   ]
+  },
+  {
+   "req_uid": "REQ-0115",
+   "verdict": "FAILS",
+   "requirement": "The controller must assert the SDA open-drain enable low (drive SDA low by asserting sda_oen = 0) when din equals 0 during a WRITE command.",
+   "check_said": "the invariant broke at edge 68, in the window opening at edge 2",
+   "testpoint": "TP-0264",
+   "ports": [
+    "al",
+    "cmd",
+    "cmd_ack",
+    "din",
+    "sda_oen"
+   ]
+  },
+  {
+   "req_uid": "REQ-0116",
+   "verdict": "FAILS",
+   "requirement": "The controller must release the SDA open-drain enable (deassert sda_oen to release SDA high) when din equals 1 during a WRITE command.",
+   "check_said": "the invariant broke at edge 8, in the window opening at edge 4",
+   "testpoint": "TP-0266",
+   "ports": [
+    "al",
+    "cmd",
+    "cmd_ack",
+    "din",
+    "ena",
+    "sda_oen"
+   ]
+  },
+  {
+   "req_uid": "REQ-0119",
+   "verdict": "FAILS",
+   "requirement": "The FSM pulls SCL low again (asserts scl_oen to drive SCL low) to end the high phase of the WRITE bit.",
+   "check_said": "the expected response never occurred, and the window opening at edge 15 ran to the end of trace -- the obligation was never discharged",
+   "testpoint": "TP-0272",
+   "ports": [
+    "cmd",
+    "ena",
+    "nReset",
+    "rst",
+    "scl_oen"
+   ]
+  }
+ ],
+ "uncovered": [
+  "REQ-0004",
+  "REQ-0009",
+  "REQ-0012",
+  "REQ-0013",
+  "REQ-0017",
+  "REQ-0018",
+  "REQ-0019",
+  "REQ-0024",
+  "REQ-0033",
+  "REQ-0035",
+  "REQ-0036",
+  "REQ-0053",
+  "REQ-0061",
+  "REQ-0069",
+  "REQ-0076",
+  "REQ-0077",
+  "REQ-0078",
+  "REQ-0079",
+  "REQ-0081",
+  "REQ-0083",
+  "REQ-0085",
+  "REQ-0089",
+  "REQ-0108",
+  "REQ-0118",
+  "REQ-0125"
+ ],
+ "passing_count": 44
+}

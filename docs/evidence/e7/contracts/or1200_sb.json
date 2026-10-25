@@ -1,0 +1,214 @@
+{
+ "source_of_truth": "spec",
+ "module_name": "or1200_sb",
+ "parameters": [],
+ "io": [
+  {
+   "name": "clk",
+   "dir": "input",
+   "width": 1,
+   "notes": "primary clock"
+  },
+  {
+   "name": "rst",
+   "dir": "input",
+   "width": 1,
+   "notes": "active-high reset; assumed synchronous because no asynchronous reset edge is specified"
+  },
+  {
+   "name": "dcsb_dat_i",
+   "dir": "input",
+   "width": 32,
+   "notes": "DC-side request write data"
+  },
+  {
+   "name": "dcsb_adr_i",
+   "dir": "input",
+   "width": 32,
+   "notes": "DC-side request address"
+  },
+  {
+   "name": "dcsb_cyc_i",
+   "dir": "input",
+   "width": 1,
+   "notes": "DC-side cycle qualifier"
+  },
+  {
+   "name": "dcsb_stb_i",
+   "dir": "input",
+   "width": 1,
+   "notes": "DC-side request strobe"
+  },
+  {
+   "name": "dcsb_we_i",
+   "dir": "input",
+   "width": 1,
+   "notes": "DC-side write qualifier"
+  },
+  {
+   "name": "dcsb_sel_i",
+   "dir": "input",
+   "width": 4,
+   "notes": "DC-side byte-lane select"
+  },
+  {
+   "name": "dcsb_cab_i",
+   "dir": "input",
+   "width": 1,
+   "notes": "DC-side consecutive-address burst indication"
+  },
+  {
+   "name": "dcsb_dat_o",
+   "dir": "output",
+   "width": 32,
+   "notes": "BIU return data forwarded to DC side"
+  },
+  {
+   "name": "dcsb_ack_o",
+   "dir": "output",
+   "width": 1,
+   "notes": "local one-cycle store acceptance acknowledgment or direct BIU acknowledgment"
+  },
+  {
+   "name": "dcsb_err_o",
+   "dir": "output",
+   "width": 1,
+   "notes": "forced low for buffered-store path; direct BIU error otherwise"
+  },
+  {
+   "name": "sbbiu_dat_o",
+   "dir": "output",
+   "width": 32,
+   "notes": "BIU-side write data or direct DC-side data"
+  },
+  {
+   "name": "sbbiu_adr_o",
+   "dir": "output",
+   "width": 32,
+   "notes": "BIU-side address"
+  },
+  {
+   "name": "sbbiu_cyc_o",
+   "dir": "output",
+   "width": 1,
+   "notes": "BIU-side cycle qualifier"
+  },
+  {
+   "name": "sbbiu_stb_o",
+   "dir": "output",
+   "width": 1,
+   "notes": "BIU-side request strobe"
+  },
+  {
+   "name": "sbbiu_we_o",
+   "dir": "output",
+   "width": 1,
+   "notes": "forced high for buffered-store path; direct DC-side write qualifier otherwise"
+  },
+  {
+   "name": "sbbiu_sel_o",
+   "dir": "output",
+   "width": 4,
+   "notes": "BIU-side byte-lane select"
+  },
+  {
+   "name": "sbbiu_cab_o",
+   "dir": "output",
+   "width": 1,
+   "notes": "forced low for buffered-store path; direct DC-side burst indication otherwise"
+  },
+  {
+   "name": "sbbiu_dat_i",
+   "dir": "input",
+   "width": 32,
+   "notes": "BIU return data"
+  },
+  {
+   "name": "sbbiu_ack_i",
+   "dir": "input",
+   "width": 1,
+   "notes": "BIU transaction acknowledgment"
+  },
+  {
+   "name": "sbbiu_err_i",
+   "dir": "input",
+   "width": 1,
+   "notes": "BIU transaction error indication"
+  }
+ ],
+ "clocking": {
+  "is_sequential": true,
+  "clock": {
+   "name": "clk",
+   "edge": "posedge"
+  },
+  "reset": {
+   "name": "rst",
+   "active": "high",
+   "type": "synchronous",
+   "assumption": "Reset is sampled on the rising clock edge."
+  }
+ },
+ "timing": {
+  "dcsb_ack_o": {
+   "latency_cycles": 1,
+   "notes": "For an accepted buffered write, fifo_wr occurs at the capture edge and the registered local acknowledgment is asserted on the following clock cycle. On the direct path, dcsb_ack_o is a combinational forwarding of sbbiu_ack_i and has zero interface latency."
+  }
+ },
+ "functional_summary": [
+  "When OR1200_SB_IMPLEMENTED is enabled, buffer only valid DC-side writes satisfying dcsb_cyc_i && dcsb_stb_i && dcsb_we_i, provided the FIFO is not full and the previous local write acknowledgment is not being held.",
+  "Store the buffered payload as {dcsb_sel_i, dcsb_dat_i, dcsb_adr_i}; do not store we, cab, cyc, or stb.",
+  "Select the Store Buffer BIU path when sel_sb = !fifo_empty || (!fifo_empty && outstanding_store) equivalently !fifo_empty || outstanding_store; otherwise select the direct DC-to-BIU path.",
+  "The buffered path drives the FIFO payload to the BIU, forces sbbiu_we_o high, and forces sbbiu_cab_o low. It occupies and prioritizes the BIU interface over new direct requests.",
+  "Only one buffered store may be outstanding on the BIU side. fifo_rd is asserted whenever outstanding_store is low, allowing the FIFO implementation to fetch a request; the FIFO itself determines whether an empty read actually pops an entry.",
+  "outstanding_store is cleared by sbbiu_ack_i; otherwise it is set when the Store Buffer path is selected or a new store is written into the FIFO.",
+  "For the Store Buffer path, dcsb_ack_o is fifo_wr_ack and dcsb_err_o is forced low. For the direct path, dcsb_ack_o and dcsb_err_o forward sbbiu_ack_i and sbbiu_err_i, respectively. dcsb_dat_o always forwards sbbiu_dat_i.",
+  "When OR1200_SB_IMPLEMENTED is disabled, all DC-side request signals pass directly to the corresponding BIU outputs and BIU data, acknowledgment, and error signals pass directly back to the DC side."
+ ],
+ "corner_cases": [
+  "Reset clears outstanding_store and fifo_wr_ack; the FIFO must be reset to empty. No buffered transaction may be considered outstanding after reset.",
+  "A valid write is not locally acknowledged when the FIFO is full or fifo_wr_ack is already asserted.",
+  "The local buffered-write acknowledgment indicates FIFO acceptance only, not BIU completion, and BIU errors for buffered stores are intentionally not returned to the DC side.",
+  "A pending FIFO entry or outstanding store blocks direct read and non-buffered requests from reaching the BIU until the Store Buffer path is released.",
+  "When sbbiu_ack_i is asserted for an outstanding buffered store, that store completes and outstanding_store is cleared on the active clock edge; no new buffered store may be treated as simultaneously completed unless the specified state-update priority is preserved.",
+  "FIFO capacity and pointer-width behavior are delegated to the internal or1200_sb_fifo implementation because the specification does not define its depth.",
+  "The non-implemented configuration must not depend on FIFO state, outstanding_store, or fifo_wr_ack and must remain a pure combinational pass-through."
+ ],
+ "test_plan": [
+  "Compile and test both configurations: with OR1200_SB_IMPLEMENTED defined and undefined.",
+  "Apply reset with all ordinary request and response inputs idle, then verify cleared local state behavior and an empty Store Buffer.",
+  "Issue an accepted buffered write and verify payload storage, one-cycle-delayed local dcsb_ack_o, forced-low buffered dcsb_err_o, and no requirement to wait for BIU acknowledgment.",
+  "Hold sbbiu_ack_i low while issuing multiple stores and verify FIFO ordering, BIU serialization, and that only one buffered store is active at a time.",
+  "Acknowledge each buffered BIU transaction and verify outstanding_store release and transition back to direct-path operation.",
+  "Fill the FIFO to capacity and verify that an additional valid write is not accepted or locally acknowledged until space is available.",
+  "Issue reads and non-buffered requests while the FIFO is non-empty or a buffered store is outstanding; verify they are blocked from the BIU, then pass through after Store Buffer release.",
+  "Verify buffered BIU transactions force sbbiu_we_o=1 and sbbiu_cab_o=0 while preserving address, data, and byte select.",
+  "Verify direct-path requests preserve all DC-side request controls and directly forward BIU ack, error, and return data.",
+  "Test simultaneous FIFO activity and BIU acknowledgment, reset during pending activity, and consecutive back-to-back accepted writes."
+ ],
+ "guidance": {
+  "verifier": [
+   "Drive all inputs to idle values before releasing reset; ordinary active-high request and response inputs idle at zero.",
+   "Sample registered state-dependent outputs after the rising edge, preferably at the following falling edge to avoid race conditions; sample combinational direct-path behavior after input changes settle.",
+   "Model buffered-store acknowledgment separately from BIU completion: an accepted FIFO write is acknowledged one clock later, while its BIU transaction may complete much later.",
+   "Use the actual FIFO capacity from the compiled or1200_sb_fifo implementation when testing full and empty behavior.",
+   "Check that direct requests are never forwarded while sel_sb is asserted, and check exact payload/control transformations on the buffered BIU path."
+  ],
+  "coder": [
+   "Preserve the exact module name, port names, directions, and widths; OR1200_SB_IMPLEMENTED is a compile-time configuration, not a module parameter.",
+   "Implement reset synchronously on posedge clk unless the surrounding source explicitly supplies a different reset convention.",
+   "Use explicit 68-bit FIFO packing and unpacking: {sel[3:0], dat[31:0], adr[31:0]}.",
+   "Keep FIFO read enable, FIFO empty handling, sel_sb, outstanding_store, and fifo_wr_ack semantics distinct; fifo_rd itself is !outstanding_store and need not include !fifo_empty.",
+   "Ensure buffered BIU controls force write semantics and non-consecutive addressing, while the undefined configuration is a pure direct pass-through."
+  ],
+  "debugger": [
+   "First check reset polarity and synchronous versus asynchronous implementation, then inspect FIFO empty/full and pointer timing.",
+   "Check off-by-one errors in fifo_wr_ack and local dcsb_ack_o timing.",
+   "Check outstanding_store update priority when sbbiu_ack_i, sel_sb, and fifo_wr occur in the same cycle.",
+   "Check that reads are not accidentally buffered or allowed through while a buffered store owns the BIU.",
+   "Check payload bit ordering, forced sbbiu_we_o/sbbiu_cab_o values, and masking of buffered-store errors.",
+   "Check that the non-implemented preprocessor branch has no references to unavailable FIFO or state signals."
+  ]
+ },
+ "contract_sva": null
+}

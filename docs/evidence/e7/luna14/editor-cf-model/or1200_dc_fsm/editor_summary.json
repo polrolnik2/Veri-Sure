@@ -1,0 +1,85 @@
+{
+  "run": "/home/user/runs-cf/luna14/or1200_dc_fsm",
+  "module": "or1200_dc_fsm",
+  "bodies": 79,
+  "requirements": 79,
+  "set": "shipped",
+  "trials": 20,
+  "rounds": 3,
+  "feedback": "model",
+  "extra_sources": [],
+  "include_dirs": [],
+  "seconds": 5942,
+  "history": [
+    {
+      "round": 0,
+      "requirements": 79,
+      "pass": 65,
+      "fail": 9,
+      "abstain": 5,
+      "failing_testpoints": 12,
+      "failing": [
+        "REQ-0025",
+        "REQ-0026",
+        "REQ-0039",
+        "REQ-0040",
+        "REQ-0047",
+        "REQ-0051",
+        "REQ-0058",
+        "REQ-0081",
+        "REQ-0087"
+      ],
+      "abstaining": [
+        "REQ-0028",
+        "REQ-0049",
+        "REQ-0082",
+        "REQ-0089",
+        "REQ-0093"
+      ],
+      "rtl_lines": 284,
+      "editor_trials_used": 13
+    },
+    {
+      "round": 1,
+      "requirements": 79,
+      "pass": 74,
+      "fail": 0,
+      "abstain": 5,
+      "failing_testpoints": 4,
+      "failing": [],
+      "abstaining": [
+        "REQ-0028",
+        "REQ-0049",
+        "REQ-0082",
+        "REQ-0089",
+        "REQ-0093"
+      ],
+      "rtl_lines": 275
+    }
+  ],
+  "final": {
+    "round": 1,
+    "requirements": 79,
+    "pass": 74,
+    "fail": 0,
+    "abstain": 5,
+    "failing_testpoints": 4,
+    "failing": [],
+    "abstaining": [
+      "REQ-0028",
+      "REQ-0049",
+      "REQ-0082",
+      "REQ-0089",
+      "REQ-0093"
+    ],
+    "rtl_lines": 275
+  },
+  "usage": {
+    "input": 34465414,
+    "cached": 30940536,
+    "output": 185654,
+    "reasoning": 0,
+    "calls": 231,
+    "cache_hit_rate": 0.8977
+  }
+}

@@ -1,0 +1,11 @@
+--- editor /home/user/runs/luna13/fpu_exceptions start 2026-10-12T16:09:48Z on fbf35f2
+== RTL editor
+   - :0: Verilog $finish
+   
+   ROUND 1: 132 pass, 1 FAIL, 5 abstain of 138 requirement(s); 0 failing testpoint(s)
+     failing: REQ-0135
+   
+   FINAL rtl.sv: 528 lines; summary /home/user/runs/luna13/results/fpu_exceptions/editor_summary.json
+   -> exit 0 (log /home/user/runs/luna13/results/fpu_exceptions/editor.log)
+== ChipVerilog verdict: function_fail (equivalence, bounded_seq)
+--- editor exited 0 at 2026-10-12T16:48:06Z

@@ -1,0 +1,37 @@
+{
+ "adequacy": null,
+ "gate": {
+  "present": false
+ },
+ "model_present": false,
+ "oracles": {
+  "by_requirement": {},
+  "correspondence_checked": null,
+  "dispositions": {},
+  "frozen": 0,
+  "repaired": 0,
+  "rounds": null,
+  "vacuity_checked": null
+ },
+ "rtl_produced": false,
+ "run": "b-i2c",
+ "turns": [
+  {
+   "conforms_by_liveness": null,
+   "counts": {
+    "CONFORMS": 0,
+    "NOT_EXERCISED": 0,
+    "ORACLE_INVALID": 0,
+    "UNDECIDED": 0,
+    "UNOBSERVABLE": 0,
+    "VACUOUS": 0,
+    "VIOLATES": 0
+   },
+   "idle_turns": null,
+   "stimulus_added": 0,
+   "stopped_because": "",
+   "turn": "r0",
+   "violates_the_witness_also_fails": []
+  }
+ ]
+}

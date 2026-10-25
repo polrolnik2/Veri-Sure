@@ -1,0 +1,16 @@
+{
+  "reasoning": "The contract declares a purely combinational module (clocking.is_sequential is false, both outputs at latency_cycles 0), so the dispatch is `evaluate` and there is no state to carry between calls. I have written one helper, `_half_add`, rather than one method per requirement: REQ-0000 (sum = a XOR b) and REQ-0001 (cout = a AND b) are two sentences about the same piece of hardware, and splitting them would separate a function from its own carry. `covers` records that both requirements are implemented there and surfaced by `evaluate`. All four ports are one bit wide; I mask on read and on write so the model stays truthful to the declared widths even if the harness presents a wider int. The model is a pure function of `i`: no imports, no randomness, no time, no I/O, no state. Nothing is ambiguous -- the specification names the half adder outright -- so `underdetermined` is empty.",
+  "base": "evaluate",
+  "source": "def _half_add(self, a, b):\n    # The half adder itself, factored out because both outputs are two\n    # halves of one function -- REQ-0000 and REQ-0001 are two sentences\n    # about the same piece of hardware, not two pieces.\n    a = self.mask(a, 1)\n    b = self.mask(b, 1)\n    return self.mask(a ^ b, 1), self.mask(a & b, 1)\n\ndef evaluate(self, i):\n    o = {p: None for p in self.OUTPUT_PORTS}\n    o['sum'], o['cout'] = self._half_add(i['a'], i['b'])\n    return o\n",
+  "covers": {
+    "REQ-0000": [
+      "_half_add",
+      "evaluate"
+    ],
+    "REQ-0001": [
+      "_half_add",
+      "evaluate"
+    ]
+  },
+  "underdetermined": []
+}

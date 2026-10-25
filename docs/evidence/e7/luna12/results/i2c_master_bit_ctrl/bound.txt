@@ -1,0 +1,30 @@
+bound 16 probe(s), 0 left unbound:
+   clk_en                       w=1  values seen [0, 1]
+   cnt_reload                   w=1  values seen [0, 1]
+   cnt_zero                     w=1  values seen [0, 1]
+   cscl                         w=1  values seen [0, 1]
+   csda                         w=1  values seen [0, 1]
+   dscl                         w=1  values seen [0, 1]
+   fsm_active                   w=1  values seen [0, 1]
+   in_read_sequence             w=1  values seen [0, 1]
+   in_start_sequence            w=1  values seen [0, 1]
+   in_stop_sequence             w=1  values seen [0, 1]
+   in_write_sequence            w=1  values seen [0, 1]
+   scl_sync                     w=1  values seen [0, 1]
+   sda_chk                      w=1  values seen [0, 1]
+   slave_wait                   w=1  values seen [0, 1]
+   sta_condition                w=1  values seen [0, 1]
+   sto_condition                w=1  values seen [0, 1]
+
+/home/user/runs/luna12/after_oracles/i2c_master_bit_ctrl
+scoring the SHIPPED set (shipped.json): 104 bodies over 103 requirement(s); 485 golden trace(s)
+
+SPAN       96/117 behavioural = 82.1%   (149 minted, 130 state an observable obligation)
+BLINDNESS  36329/55857 cells = 65.0%   (population 7, effective_size 78)
+AUDIT      27/87 judgeable = 31.0%
+ACCEPTS    0 of 7 design(s)
+  note: 104 check bodies over 103 requirement(s): 1 requirement(s)' worth of ADDITIONAL bodies are carried. span and audit count requirements (103); blindness and effective_size count bodies (104), because a cell is separated by a check and a second body is a second chance to separate it
+  note: audit is over the 87 of 96 accepted check(s) the control can be judged on, and says so rather than reporting a rate over a denominator it does not have
+
+convicting golden: 29  REQ-0018[behav] REQ-0025[behav] REQ-0026[behav] REQ-0027[behav] REQ-0029[inter] REQ-0033[behav] REQ-0054[behav] REQ-0057[behav] REQ-0059[behav] REQ-0068[behav] REQ-0075[behav] REQ-0076[behav] REQ-0079[behav] REQ-0088[behav] REQ-0090[behav] REQ-0097[scaff] REQ-0098[behav] REQ-0104[behav] REQ-0107[behav] REQ-0110[behav] REQ-0112[behav] REQ-0115[behav] REQ-0121[behav] REQ-0123[behav] REQ-0127[behav] REQ-0128[behav] REQ-0132[behav] REQ-0137[behav] REQ-0139[behav]
+target span>0.90 no  blindness<0.10 no  audit=0 no

@@ -1,0 +1,102 @@
+[
+ {
+  "module": "fpu_exceptions",
+  "span": "73/85 behavioural = 85.9%",
+  "blindness": "74/687 cells = 10.8%",
+  "audit_raw": "43/71 judgeable = 60.6%",
+  "audit_bound": "43/71 judgeable = 60.6%",
+  "accepts": "1 of 7 design(s)",
+  "population": "7",
+  "witness": true,
+  "pool": 329,
+  "shipped": 138,
+  "refuted_excluded": 75,
+  "rule": "majority",
+  "recorded_cost_usd": 2.34,
+  "uncosted_calls": {
+   "calls": 183,
+   "prompt_tokens": 5643765,
+   "completion_tokens": 1815419
+  }
+ },
+ {
+  "module": "i2c_master_bit_ctrl",
+  "span": "107/119 behavioural = 89.9%",
+  "blindness": "36123/48987 cells = 73.7%",
+  "audit_raw": "7/36 judgeable = 19.4%",
+  "audit_bound": "16/97 judgeable = 16.5%",
+  "accepts": "0 of 7 design(s)",
+  "population": "7",
+  "witness": true,
+  "pool": 345,
+  "shipped": 111,
+  "refuted_excluded": 109,
+  "rule": "majority",
+  "recorded_cost_usd": 2.51,
+  "uncosted_calls": {
+   "calls": 0,
+   "prompt_tokens": 0,
+   "completion_tokens": 0
+  }
+ },
+ {
+  "module": "i2c_master_byte_ctrl",
+  "span": "96/110 behavioural = 87.3%",
+  "blindness": "3773/48918 cells = 7.7%",
+  "audit_raw": "0/8 judgeable = 0.0%",
+  "audit_bound": "28/86 judgeable = 32.6%",
+  "accepts": "0 of 7 design(s)",
+  "population": "7",
+  "witness": true,
+  "pool": 303,
+  "shipped": 99,
+  "refuted_excluded": 107,
+  "rule": "majority",
+  "recorded_cost_usd": 2.11,
+  "uncosted_calls": {
+   "calls": 187,
+   "prompt_tokens": 5370690,
+   "completion_tokens": 2091762
+  }
+ },
+ {
+  "module": "or1200_dc_fsm",
+  "span": "73/82 behavioural = 89.0%",
+  "blindness": "3411/3661 cells = 93.2%",
+  "audit_raw": "0/8 judgeable = 0.0%",
+  "audit_bound": "3/69 judgeable = 4.3%",
+  "accepts": "4 of 7 design(s)",
+  "population": "7",
+  "witness": true,
+  "pool": 244,
+  "shipped": 79,
+  "refuted_excluded": 47,
+  "rule": "majority",
+  "recorded_cost_usd": 1.66,
+  "uncosted_calls": {
+   "calls": 0,
+   "prompt_tokens": 0,
+   "completion_tokens": 0
+  }
+ },
+ {
+  "module": "or1200_sb",
+  "span": "52/54 behavioural = 96.3%",
+  "blindness": "3264/8306 cells = 39.3%",
+  "audit_raw": "0/5 judgeable = 0.0%",
+  "audit_bound": "0/5 judgeable = 0.0%",
+  "accepts": "2 of 7 design(s)",
+  "population": "7",
+  "witness": true,
+  "pool": 214,
+  "shipped": 66,
+  "refuted_excluded": 46,
+  "rule": "majority",
+  "recorded_cost_usd": 0.53,
+  "uncosted_calls": {
+   "calls": 496,
+   "prompt_tokens": 10266029,
+   "completion_tokens": 2693657
+  }
+ }
+]

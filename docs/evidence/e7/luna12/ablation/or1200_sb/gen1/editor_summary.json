@@ -1,0 +1,56 @@
+{
+  "run": "/home/user/runs/luna12/or1200_sb",
+  "module": "or1200_sb",
+  "bodies": 68,
+  "requirements": 68,
+  "set": "shipped",
+  "trials": 20,
+  "rounds": 0,
+  "seconds": 272,
+  "history": [
+    {
+      "round": 0,
+      "requirements": 68,
+      "pass": 63,
+      "fail": 1,
+      "abstain": 4,
+      "failing_testpoints": 12,
+      "failing": [
+        "REQ-0075"
+      ],
+      "abstaining": [
+        "REQ-0031",
+        "REQ-0037",
+        "REQ-0056",
+        "REQ-0066"
+      ],
+      "rtl_lines": 130
+    }
+  ],
+  "final": {
+    "round": 0,
+    "requirements": 68,
+    "pass": 63,
+    "fail": 1,
+    "abstain": 4,
+    "failing_testpoints": 12,
+    "failing": [
+      "REQ-0075"
+    ],
+    "abstaining": [
+      "REQ-0031",
+      "REQ-0037",
+      "REQ-0056",
+      "REQ-0066"
+    ],
+    "rtl_lines": 130
+  },
+  "usage": {
+    "input": 9488,
+    "cached": 0,
+    "output": 12994,
+    "reasoning": 0,
+    "calls": 1,
+    "cache_hit_rate": 0.0
+  }
+}

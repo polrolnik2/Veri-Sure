@@ -1,0 +1,26 @@
+{
+  "reasoning": "one clause, visible on one output port",
+  "normalized": [
+    {
+      "req_uid": "REQ-0000",
+      "activation": {
+        "text": "always, on every evaluation",
+        "inputs": {}
+      },
+      "observable": [
+        "sum"
+      ],
+      "unobservable_reason": "",
+      "expectation": "sum is the exclusive-OR of a and b",
+      "observed_via": [
+        {
+          "port": "sum",
+          "through_req": "",
+          "when": "on every evaluation",
+          "shows": "sum is 1 when exactly one of a and b is 1",
+          "otherwise": "sum is 0 when they are not"
+        }
+      ]
+    }
+  ]
+}

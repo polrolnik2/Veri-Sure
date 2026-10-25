@@ -1,0 +1,144 @@
+{
+  "ok": true,
+  "rounds": 1,
+  "issues": [
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0000.condition",
+      "message": "mentions ['across', 'boundary', 'command', 'driven', 'encodings', 'exercised', 'listed', 'monitored', 'phases', 'released', 'resulting', 'through', 'toggled', 'valid'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0001.condition",
+      "message": "mentions ['READ', 'START', 'STOP', 'WRITE', 'active', 'bus', 'connected', 'drain', 'driven', 'model', 'observed', 'open', 'resolved', 'through'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0002.condition",
+      "message": "mentions ['START', 'STOP', 'bus', 'connected', 'drain', 'followed', 'model', 'observed', 'open', 'resolved', 'waveform'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0003.condition",
+      "message": "mentions ['active', 'between', 'change', 'edges', 'inactive', 'rising', 'successive', 'valid'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0004.condition",
+      "message": "mentions ['across', 'active', 'being', 'command', 'edge', 'inactive', 'released', 'rising', 'transitions'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0005.condition",
+      "message": "mentions ['active', 'between', 'command', 'edge', 'edges', 'released', 'rising', 'transitions', 'without'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0006.condition",
+      "message": "mentions ['START', 'disabled', 'edges', 'holds', 'interval', 'later', 'multiple', 'reasserted', 'request', 'rising', 'selects', 'stated', 'timing', 'toggled'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0007.condition",
+      "message": "mentions ['START', 'active', 'attempted', 'completion', 'held', 'holds', 'idle', 'request', 'through'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0008.condition",
+      "message": "mentions ['START', 'active', 'executed', 'idle', 'nonzero', 'prescaler', 'remain', 'request', 'runs', 'separate', 'two'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0009.condition",
+      "message": "mentions ['active', 'allowed', 'followed', 'history', 'independent', 'interval', 'pulse', 'receive', 'short', 'sustained', 'synchronized', 'update'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0010.condition",
+      "message": "mentions ['clocks', 'controller', 'enough', 'filtering', 'held', 'idle', 'pass', 'sampled', 'synchronization', 'transitions'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0011.condition",
+      "message": "mentions ['START', 'active', 'bus', 'clocks', 'command', 'enough', 'filtering', 'has', 'held', 'made', 'pass', 'prior', 'sampled', 'synchronization', 'transitions'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0012.condition",
+      "message": "mentions ['READ', 'SCL', 'active', 'bus', 'filter', 'held', 'holds', 'later', 'model', 'multiple', 'opportunities', 'released', 'releases', 'request'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0013.condition",
+      "message": "mentions ['READ', 'active', 'driven', 'falling', 'followed', 'phase', 'released', 'rising', 'through'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0014.condition",
+      "message": "mentions ['SDA', 'WRITE', 'arbitration', 'become', 'check', 'driven', 'enough', 'filtered', 'holds', 'long', 'phase', 'releases', 'request', 'returning'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0015.condition",
+      "message": "mentions ['READ', 'STOP', 'active', 'controller', 'create', 'driven', 'enough', 'externally', 'filtered', 'holds', 'long', 'observed', 'request'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0016.condition",
+      "message": "mentions ['READ', 'SDA', 'active', 'driven', 'filtered', 'holds', 'interval', 'level', 'persists', 'released', 'request', 'rising', 'through'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0017.condition",
+      "message": "mentions ['READ', 'SDA', 'active', 'filtered', 'holds', 'interval', 'level', 'present', 'released', 'request', 'rising'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0018.condition",
+      "message": "mentions ['START', 'active', 'bus', 'held', 'holds', 'idle', 'observed', 'request', 'until'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0019.condition",
+      "message": "mentions ['SCL', 'START', 'STOP', 'allowed', 'bus', 'has', 'holds', 'initially', 'occurred', 'phase', 'released', 'represents', 'request', 'rise', 'through'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0020.condition",
+      "message": "mentions ['WRITE', 'active', 'arbitration', 'check', 'completion', 'externally', 'held', 'holds', 'phase', 'released', 'request', 'through'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0021.condition",
+      "message": "mentions ['WRITE', 'active', 'arbitration', 'check', 'completion', 'externally', 'held', 'holds', 'phase', 'released', 'request', 'through'], which are not contract ports",
+      "kind": null
+    },
+    {
+      "severity": "warning",
+      "path": "bin.BIN-0022.condition",
+      "message": "mentions ['NOP', 'active', 'command', 'controller', 'driven', 'encoding', 'idle', 'listed', 'through', 'unsupported'], which are not contract ports",
+      "kind": null
+    }
+  ]
+}

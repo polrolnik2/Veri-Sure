@@ -1,0 +1,11 @@
+--- editor /home/user/runs/luna14/or1200_sb start 2026-10-12T14:38:14Z on fbf35f2
+== RTL editor
+   - :0: Verilog $finish
+   
+   ROUND 3: 31 pass, 10 FAIL, 25 abstain of 66 requirement(s); 128 failing testpoint(s)
+     failing: REQ-0001, REQ-0014, REQ-0016, REQ-0021, REQ-0035, REQ-0036, REQ-0072, REQ-0074, REQ-0080, REQ-0081
+   
+   FINAL rtl.sv: 202 lines; summary /home/user/runs/luna14/results/or1200_sb/editor_summary.json
+   -> exit 0 (log /home/user/runs/luna14/results/or1200_sb/editor.log)
+== ChipVerilog verdict: pass (equivalence, induction)
+--- editor exited 0 at 2026-10-12T16:53:15Z

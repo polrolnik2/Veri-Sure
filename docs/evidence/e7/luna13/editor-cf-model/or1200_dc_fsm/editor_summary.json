@@ -1,0 +1,66 @@
+{
+  "run": "/home/user/runs-cf/luna13/or1200_dc_fsm",
+  "module": "or1200_dc_fsm",
+  "bodies": 84,
+  "requirements": 84,
+  "set": "shipped",
+  "trials": 20,
+  "rounds": 3,
+  "feedback": "model",
+  "extra_sources": [],
+  "include_dirs": [],
+  "seconds": 964,
+  "history": [
+    {
+      "round": 0,
+      "requirements": 84,
+      "pass": 76,
+      "fail": 8,
+      "abstain": 0,
+      "failing_testpoints": 20,
+      "failing": [
+        "REQ-0002",
+        "REQ-0036",
+        "REQ-0038",
+        "REQ-0039",
+        "REQ-0040",
+        "REQ-0058",
+        "REQ-0081",
+        "REQ-0097"
+      ],
+      "abstaining": [],
+      "rtl_lines": 266,
+      "editor_trials_used": 1
+    },
+    {
+      "round": 1,
+      "requirements": 84,
+      "pass": 84,
+      "fail": 0,
+      "abstain": 0,
+      "failing_testpoints": 0,
+      "failing": [],
+      "abstaining": [],
+      "rtl_lines": 268
+    }
+  ],
+  "final": {
+    "round": 1,
+    "requirements": 84,
+    "pass": 84,
+    "fail": 0,
+    "abstain": 0,
+    "failing_testpoints": 0,
+    "failing": [],
+    "abstaining": [],
+    "rtl_lines": 268
+  },
+  "usage": {
+    "input": 1771746,
+    "cached": 1575933,
+    "output": 19287,
+    "reasoning": 0,
+    "calls": 40,
+    "cache_hit_rate": 0.8895
+  }
+}

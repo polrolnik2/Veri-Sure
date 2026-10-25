@@ -1,0 +1,10 @@
+{
+  "status": "pass",
+  "flow": "equivalence",
+  "proof_type": "induction",
+  "reason": "equivalence proven by temporal induction (k=16)",
+  "reference_precheck": "pass",
+  "interface_status": "compatible",
+  "formal_status": "equivalent",
+  "compile_gate_status": "pass"
+}

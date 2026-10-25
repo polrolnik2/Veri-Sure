@@ -1,0 +1,1415 @@
+{
+  "oracles": [
+    {
+      "req_uid": "REQ-0022",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "sda_i:External I2C SDA line input from the pad or top-level tri-state/open-drain buffer. This input is synchronized, filtered, and used for START/STOP detection, arbitration checks, and read data sampling.",
+      "source": "def decide(trace):\n    # al is a declared output route, but its asserted behavior belongs to\n    # the linked arbitration requirement, not this interface definition.\n    _observed_al = [row.get('outputs', {}).get('al') for row in trace]\n    return (None, None, 'sda_i synchronization/filtering and internal use are not independently observable; al is owned by the linked arbitration requirement')",
+      "hash": "04ac10a8105812d0",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0045",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "A filter counter then controls when samples are shifted into `fSCL` and `fSDA`.",
+      "source": "def decide(trace):\n    if not trace:\n        return (None, None, 'the qualifying synchronized SDA transition never occurred')\n\n    triggers = []\n    for i in range(1, len(trace)):\n        prev = trace[i - 1]['inputs'].get('sda_i')\n        row = trace[i]\n        cur = row['inputs'].get('sda_i')\n        scl = row['inputs'].get('scl_i')\n        if prev == 1 and cur == 0 and scl == 1:\n            triggers.append(i)\n\n    if not triggers:\n        return (None, None, 'the qualifying synchronized SDA falling transition with SCL high never occurred')\n\n    for i in triggers:\n        for j in range(i + 1, len(trace)):\n            before = trace[j - 1]['outputs'].get('busy')\n            after = trace[j]['outputs'].get('busy')\n            if before == 0 and after == 1:\n                return (True, trace[j]['edge'], 'busy rose after the qualifying SDA transition, indicating the filter sampling effect became visible')\n\n    return (False, trace[triggers[0]]['edge'], 'busy did not rise after the qualifying SDA transition; no observable filter-sampling effect was produced')",
+      "hash": "a97fb38c9c1b55f1",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0041",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "4. Multi-master clock synchronization: `scl_sync` detects a falling edge on the filtered SCL input while this master has released SCL high.",
+      "source": "def decide(trace):\n    # The route applies only during an active command sequence.\n    segments = []\n    start = None\n    for i, row in enumerate(trace):\n        active = row['outputs'].get('busy') == 1\n        prev_active = i > 0 and trace[i - 1]['outputs'].get('busy') == 1\n        if active and not prev_active:\n            if start is not None:\n                segments.append((start, i))\n            start = i\n    if start is not None:\n        segments.append((start, len(trace)))\n\n    event_rows = []\n    ordinary_completion = False\n    incomplete_event = None\n\n    for begin, end in segments:\n        events = []\n        for i in range(begin, end):\n            if i == 0:\n                continue\n            prev = trace[i - 1]['inputs'].get('scl_i')\n            cur = trace[i]['inputs'].get('scl_i')\n            released = trace[i]['outputs'].get('scl_oen') == 1\n            if prev is not None and cur is not None and prev > cur and released:\n                events.append(i)\n                event_rows.append(i)\n\n        ack_rows = [\n            i for i in range(begin, end)\n            if trace[i]['outputs'].get('cmd_ack') == 1\n        ]\n\n        if not events and ack_rows:\n            ordinary_completion = True\n\n        for event in events:\n            if trace[event]['outputs'].get('cmd_ack') == 1:\n                return (False, trace[event]['edge'],\n                        'cmd_ack was asserted on the falling scl_i event; the completion pulse was not postponed')\n            later_ack = [i for i in ack_rows if i > event]\n            if later_ack:\n                continue\n            if incomplete_event is None:\n                incomplete_event = event\n\n    if not event_rows:\n        return (None, None, 'no falling scl_i transition while busy and scl_oen was high')\n    if not ordinary_completion:\n        return (None, None,\n                'the resynchronization case occurred, but no event-free command completion was observed for comparison')\n    if incomplete_event is not None:\n        return (None, trace[incomplete_event]['edge'],\n                'a falling scl_i event while scl_oen was high was observed, but the trace ended before a postponed cmd_ack completion pulse')\n\n    return (True, trace[event_rows[-1]]['edge'],\n            'falling scl_i events while busy and scl_oen high kept cmd_ack low until a later completion; an event-free completion pulse was also observed')",
+      "hash": "71c9bdcb424fbbac",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0109",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "Throughout all command sequences, the module uses open-drain output behavior.",
+      "source": "def decide(trace):\n    from specflow.refmodel.temporal import TO_END, after, edges, throughout, worst\n\n    scl_oen_changes = edges(trace, \"scl_oen\", \"change\")\n    sda_oen_changes = edges(trace, \"sda_oen\", \"change\")\n    activation_edges = scl_oen_changes | sda_oen_changes\n\n    def opens(row):\n        return row[\"edge\"] in activation_edges\n\n    def reset_active(row):\n        return row[\"inputs\"].get(\"nReset\") == 0 or row[\"inputs\"].get(\"rst\") == 1\n\n    windows = after(\n        trace,\n        opens,\n        until=TO_END,\n        aborts=reset_active,\n    )\n\n    def open_drain_levels(row):\n        outputs = row[\"outputs\"]\n        return outputs.get(\"scl_o\") == 0 and outputs.get(\"sda_o\") == 0\n\n    return worst([\n        throughout(w, open_drain_levels, after_activation=False)\n        for w in windows\n    ])",
+      "hash": "104fa78e0313bfa3",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0098",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "In `idle`, the module decodes the `cmd` input as START, STOP, READ, WRITE, or no operation. A recognized command moves the FSM into the corresponding command sequence, while an unsupported or idle command leaves the FSM in `idle`.",
+      "source": "def decide(trace):\n    # The required activation is the internal FSM's idle state, which is not\n    # declared in the trace.  The command encoding and clk_en condition are\n    # also unspecified or unavailable, so no sound window can be opened.\n    # `busy` is declared, but its route belongs to another requirement and\n    # cannot by itself distinguish idle from every other non-busy situation.\n    _declared_busy_observation = [\n        row.get('outputs', {}).get('busy') for row in trace\n    ]\n    return (None, None,\n            'cannot decide: the idle-state activation and clk_en are not declared, '\n            'and no cmd encoding table identifies recognized commands')",
+      "hash": "4ad3deb64a4d2dae",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0034",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "The line is pulled low when the corresponding output enable is asserted low, and released when the output enable is high.",
+      "source": "from specflow.refmodel.temporal import WHILE_ACTIVE, after, throughout, worst\n\n\ndef _level(port, value):\n    return lambda row: row['outputs'].get(port) == value\n\n\ndef decide(trace):\n    checks = []\n    cases = [\n        ('scl_oen', 0, 'scl_o', 0),\n        ('sda_oen', 0, 'sda_o', 0),\n    ]\n\n    for enable, enable_value, line, line_value in cases:\n        windows = after(\n            trace,\n            _level(enable, enable_value),\n            until=WHILE_ACTIVE,\n        )\n        checks.extend(\n            throughout(\n                window,\n                _level(line, line_value),\n            )\n            for window in windows\n        )\n\n    result = worst(checks)\n    if result[0] is None:\n        return (None, None, 'no low output-enable state occurred; the pulled-low cases were not exercised')\n    return result",
+      "hash": "10816d85600e227c",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0021",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "The external I2C clock-line input port scl_i is synchronized, filtered, and used for clock stretching, clock synchronization, START/STOP detection, and read sampling.",
+      "source": "def decide(trace):\n    from specflow.refmodel.temporal import TO_END, after, edges, eventually, throughout, worst\n\n    def low_stretch(row):\n        return (row['inputs'].get('scl_i') == 0 and\n                row['outputs'].get('scl_oen') == 1)\n\n    def scl_high(row):\n        return row['inputs'].get('scl_i') == 1\n\n    low_windows = after(trace, low_stretch, until=scl_high)\n    rises = edges(trace, 'scl_i', 'rise')\n    rise_windows = after(\n        trace,\n        lambda row: (row['edge'] in rises and\n                     row['inputs'].get('scl_i') == 1 and\n                     row['outputs'].get('scl_oen') == 1),\n        until=TO_END)\n\n    if not low_windows or not rise_windows:\n        edge = (low_windows[0].edge if low_windows else\n                rise_windows[0].edge if rise_windows else None)\n        return (None, edge,\n                'the stretch-and-release signature was not fully exercised')\n\n    held = [\n        throughout(\n            window,\n            lambda row: row['outputs'].get('scl_oen') == 1,\n            after_activation=False)\n        for window in low_windows\n    ]\n    advances = [\n        eventually(\n            window,\n            lambda row: row['outputs'].get('scl_oen') == 0,\n            strong=True,\n            after_activation=True)\n        for window in rise_windows\n    ]\n    return worst(held + advances)",
+      "hash": "453663f09b67b92b",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0062",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "The i2c_master_bit_ctrl module shall, when executing a STOP command, drive the SDA line low, then release SCL so the clock line may go high, then release SDA high while SCL is high to generate a valid I2C STOP condition, and then assert cmd_ack for the command completion.",
+      "source": "def decide(trace):\n    from specflow.refmodel.temporal import after, edges, sequence, worst\n\n    def any_condition(alternatives):\n        def predicate(row):\n            return any(\n                all(row['outputs'].get(port, row['inputs'].get(port)) == value\n                    for port, value in condition.items())\n                for condition in alternatives\n            )\n        return predicate\n\n    # No cmd encoding table is declared.  Use the STOP-shaped output signature\n    # rather than inventing a numeric cmd encoding.\n    sda_driven = edges(trace, 'sda_oen', 'fall')\n    scl_released = edges(trace, 'scl_oen', 'rise')\n    sda_released = edges(trace, 'sda_oen', 'rise')\n\n    opens = lambda row: (\n        row['edge'] in sda_driven\n        and row['outputs'].get('sda_oen') == 0\n        and row['inputs'].get('ena') == 1\n    )\n    aborts = any_condition([\n        {'nReset': 0},\n        {'rst': 1},\n    ])\n\n    windows = after(\n        trace,\n        opens,\n        until=lambda row: row['outputs'].get('cmd_ack') == 1,\n        aborts=aborts,\n    )\n\n    def released_scl(row):\n        return (\n            row['edge'] in scl_released\n            and row['outputs'].get('scl_oen') == 1\n        )\n\n    def released_sda_while_scl_high(row):\n        return (\n            row['edge'] in sda_released\n            and row['outputs'].get('sda_oen') == 1\n            and row['outputs'].get('scl_oen') == 1\n        )\n\n    def acknowledged(row):\n        return row['outputs'].get('cmd_ack') == 1\n\n    return worst([\n        sequence(\n            window,\n            released_scl,\n            released_sda_while_scl_high,\n            acknowledged,\n            strong=True,\n            after_activation=True,\n        )\n        for window in windows\n    ])",
+      "hash": "08a4353b0e6335b9",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0065",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "The command ends with `cmd_ack`.",
+      "source": "def decide(trace):\n    from specflow.refmodel.temporal import TO_END, after, eventually, worst\n\n    def holds(cond):\n        def predicate(row):\n            return all(\n                row['outputs'].get(port, row['inputs'].get(port)) == value\n                for port, value in cond.items()\n            )\n        return predicate\n\n    def any_condition(alternatives):\n        predicates = [holds(condition) for condition in alternatives]\n        return lambda row: any(predicate(row) for predicate in predicates)\n\n    # No command encoding is stated.  Use the declared output signature of\n    # the bit-level sequence instead of inventing a numeric READ command value.\n    running = holds({'busy': 1})\n    aborted = any_condition([\n        {'al': 1},\n        {'nReset': 0},\n        {'rst': 1},\n    ])\n\n    windows = after(\n        trace,\n        running,\n        until=TO_END,\n        aborts=aborted,\n    )\n\n    follows = False\n    return worst([\n        eventually(\n            window,\n            lambda row: row['outputs'].get('cmd_ack') == 1,\n            after_activation=follows,\n            strong=True,\n        )\n        for window in windows\n    ])",
+      "hash": "6772373e77a0c7db",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0038",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "slave_wait is asserted when the master has just released SCL high through scl_oen, but the filtered SCL input sSCL remains low.",
+      "source": "def decide(trace):\n    from specflow.refmodel.temporal import TO_END, after, edges, eventually, sequence, throughout, worst\n\n    scl_oen_rises = edges(trace, \"scl_oen\", \"rise\")\n\n    def stretched_release(row):\n        return (row[\"edge\"] in scl_oen_rises\n                and row[\"inputs\"].get(\"scl_i\") == 0)\n\n    windows = after(trace, stretched_release, until=TO_END)\n    follows = False\n\n    def ack_not_during_stretch(row):\n        return (row[\"inputs\"].get(\"scl_i\") != 0\n                or row[\"outputs\"].get(\"cmd_ack\") == 0)\n\n    def scl_released(row):\n        return row[\"inputs\"].get(\"scl_i\") == 1\n\n    def ack_pulses(row):\n        return row[\"outputs\"].get(\"cmd_ack\") == 1\n\n    verdicts = []\n    for w in windows:\n        verdicts.append(\n            throughout(w, ack_not_during_stretch,\n                       after_activation=follows)\n        )\n        verdicts.append(\n            sequence(w, scl_released, ack_pulses,\n                     strong=False, after_activation=follows)\n        )\n\n    return worst(verdicts)",
+      "hash": "c6ccdb5eaac1e0e9",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0091",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "If the controller expects SDA to be released high but the filtered SDA input is observed low, the module asserts the arbitration-lost flag `al`.",
+      "source": "def decide(trace):\n    checks = []\n    for row in trace:\n        inputs = row['inputs']\n        outputs = row['outputs']\n\n        # Arbitration-checking signature: busy while SDA is released.\n        # sda_i is used only to qualify the condition being checked.\n        in_check = (\n            inputs.get('nReset') != 0 and\n            inputs.get('rst') != 1 and\n            outputs.get('busy') == 1 and\n            outputs.get('sda_oen') == 1 and\n            inputs.get('sda_i') == 0\n        )\n        if in_check:\n            checks.append(row)\n\n    if not checks:\n        return (None, None,\n                'arbitration-checking condition with released SDA and observed low sda_i never occurred')\n\n    for row in checks:\n        if row['outputs'].get('al') != 1:\n            return (False, row['edge'],\n                    'during arbitration checking, sda_i was low while SDA was released but al was not asserted high')\n\n    return (True, checks[-1]['edge'],\n            f'al was asserted high for all {len(checks)} applicable arbitration-checking state(s)')",
+      "hash": "f503dcd110235151",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0093",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "When arbitration is lost, the FSM returns to `idle` and releases both SCL and SDA.",
+      "source": "def decide(trace):\n    from specflow.refmodel.temporal import TO_END, after, eventually, worst\n\n    def applies(row):\n        return row['outputs'].get('al') == 1\n\n    def released(row):\n        return (row['outputs'].get('scl_oen') == 1 and\n                row['outputs'].get('sda_oen') == 1)\n\n    windows = after(trace, applies, until=TO_END)\n    return worst([\n        eventually(w, released, strong=True, after_activation=False)\n        for w in windows\n    ])",
+      "hash": "5be2105f03709223",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0086",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "the internal counter cnt is loaded from the prescale input clk_cnt and decremented on each clock cycle",
+      "source": "def decide(trace):\n    # `busy` is the declared output signature for an active command sequence.\n    active = [r for r in trace if r['outputs'].get('busy') == 1]\n    if not active:\n        return (None, None, 'no active command sequence was observed (busy never asserted)')\n\n    transitions = []\n    previous = None\n    elapsed = 0\n    configured = None\n\n    for row in trace:\n        busy = row['outputs'].get('busy') == 1\n        scl_oen = row['outputs'].get('scl_oen')\n        clk_cnt = row['inputs'].get('clk_cnt')\n        held = row.get('held', 1)\n\n        if not busy:\n            previous = None\n            elapsed = 0\n            configured = None\n            continue\n\n        if previous is None:\n            previous = scl_oen\n            elapsed = held\n            configured = clk_cnt\n            continue\n\n        if scl_oen != previous:\n            transitions.append((row, elapsed, configured))\n            previous = scl_oen\n            elapsed = held\n            configured = clk_cnt\n        else:\n            elapsed += held\n\n    if len(transitions) < 2:\n        return (None, None, 'active sequence observed, but no successive scl_oen phase boundaries were available')\n\n    for row, interval, prescale in transitions:\n        if isinstance(prescale, int) and interval < prescale:\n            return (False, row['edge'],\n                    f'scl_oen phase transition occurred after {interval} edges, before the configured clk_cnt interval of {prescale}')\n\n    return (True, transitions[-1][0]['edge'],\n            f'{len(transitions)} scl_oen phase transitions were separated by at least their configured clk_cnt intervals')",
+      "hash": "233c4874db65bb15",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0023",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "cmd_ack is asserted for exactly one clk cycle when the current bit-level START, STOP, READ, or WRITE command finishes.",
+      "source": "def decide(trace):\n    completions = []\n    for i in range(1, len(trace)):\n        prev = trace[i - 1]['outputs']\n        row = trace[i]['outputs']\n        if prev.get('busy') == 1 and row.get('busy') == 0:\n            completions.append(i)\n\n    if not completions:\n        return (None, None, 'no command completion signature was observed: busy did not transition from asserted to deasserted')\n\n    for i in completions:\n        row = trace[i]\n        edge = row['edge']\n        if row['outputs'].get('cmd_ack') != 1:\n            return (False, edge, 'cmd_ack was not asserted when the command completion signature occurred')\n\n        if i > 0 and trace[i - 1]['outputs'].get('cmd_ack') == 1:\n            return (False, edge, 'cmd_ack was already asserted before command completion')\n\n        total = 0\n        j = i\n        while j < len(trace) and trace[j]['outputs'].get('cmd_ack') == 1:\n            total += trace[j]['held']\n            j += 1\n\n        if total != 1:\n            return (False, edge, f'cmd_ack was asserted for {total} edges; the requirement states exactly one clk cycle')\n\n        if j == len(trace):\n            return (None, edge, 'cmd_ack was high for one observed edge, but the trace ended before deassertion could be observed')\n\n    return (True, None, 'cmd_ack was asserted for exactly one clk cycle at every observed command completion')",
+      "hash": "494fd6afdaa5482d",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0048",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "START and STOP detection: A START condition is detected when filtered SDA falls while filtered SCL is high: `sta_condition = ~sSDA & dSDA & sSCL`.",
+      "source": "def decide(trace):\n    start_events = []\n    ordinary_cases = []\n\n    for i, row in enumerate(trace):\n        inputs = row.get('inputs', {})\n        outputs = row.get('outputs', {})\n\n        # The activation is not applicable during reset.\n        if inputs.get('nReset') == 0 or inputs.get('rst') == 1:\n            continue\n\n        busy_now = outputs.get('busy')\n        if busy_now != 0:\n            continue\n\n        previous = trace[i - 1] if i > 0 else None\n        previous_inputs = previous.get('inputs', {}) if previous else {}\n        sda_fell = (\n            previous is not None and\n            previous_inputs.get('sda_i') == 1 and\n            inputs.get('sda_i') == 0\n        )\n\n        is_start = sda_fell and inputs.get('scl_i') == 1\n        if is_start:\n            # The route says busy is low before the START boundary and rises\n            # at that boundary.  A current low value is therefore a failure.\n            start_events.append(row)\n        else:\n            # Evidence of the ordinary route case: no START is present while\n            # busy remains low.  This is evidence only, not a second\n            # obligation asserted under this requirement.\n            ordinary_cases.append(row)\n\n    if not start_events:\n        return (None, None, 'no applicable high-SCL SDA falling transition while busy was low')\n\n    failed = []\n    for row in start_events:\n        # Re-evaluate the boundary output without using it as the trigger.\n        i = trace.index(row)\n        current_busy = trace[i].get('outputs', {}).get('busy')\n        if current_busy != 1:\n            failed.append(row)\n\n    if failed:\n        row = failed[0]\n        return (False, row['edge'], 'busy did not rise at the START boundary')\n\n    if not ordinary_cases:\n        return (None, start_events[0]['edge'], 'START behavior was seen, but no ordinary non-START route case was observed')\n\n    return (True, start_events[0]['edge'], 'busy rose at the high-SCL SDA falling START boundary; ordinary non-START behavior was also observed')",
+      "hash": "5cb2c338f0775bba",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0081",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "In parallel with bus-status detection, the module handles clock stretching and multi-master clock synchronization.",
+      "source": "def decide(trace):\n    rows = [r for r in trace if 'scl_oen' in r.get('outputs', {})]\n    if not rows:\n        return (None, None, 'scl_oen is absent from the trace')\n    return (None, rows[0].get('edge'), 'The obligation names no falsifiable scl_oen effect; no licensed assertion can be made.')",
+      "hash": "f1d26646bd3ad528",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0052",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "The arbitration-lost flag al is asserted when a STOP condition is detected while the bit-level FSM is active and the current command is not a STOP command.",
+      "source": "def decide(trace):\n    events = []\n    for i, row in enumerate(trace):\n        if i == 0:\n            continue\n        prev = trace[i - 1]\n        inputs = row['inputs']\n        outputs = row['outputs']\n        prev_inputs = prev['inputs']\n        stop_event = prev_inputs.get('sda_i') == 0 and inputs.get('sda_i') == 1\n        active_non_stop_signature = (\n            inputs.get('ena') == 1 and\n            inputs.get('nReset') == 1 and\n            inputs.get('rst') == 0 and\n            outputs.get('busy') == 1 and\n            inputs.get('scl_i') == 1\n        )\n        if stop_event and active_non_stop_signature:\n            events.append(row)\n\n    if not events:\n        return (None, None, 'no STOP-shaped event occurred while the declared active non-STOP sequence signature was present')\n\n    for row in events:\n        if row['outputs'].get('al') != 1:\n            return (False, row['edge'], 'al was not asserted high when the STOP condition occurred during the active non-STOP sequence')\n\n    return (True, events[-1]['edge'], f'al was asserted for all {len(events)} qualified STOP event(s)')",
+      "hash": "89c211231637fa72",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0029",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "sda_oen: Active-low SDA output enable for open-drain operation; 0 means drive SDA low",
+      "source": "from specflow.refmodel.temporal import WHILE_ACTIVE, after, throughout, worst\n\n\ndef decide(trace):\n    windows = after(\n        trace,\n        lambda r: r['outputs'].get('sda_oen') == 0,\n        until=WHILE_ACTIVE,\n    )\n    return worst([\n        throughout(\n            w,\n            lambda r: r['outputs'].get('sda_oen') == 0,\n            after_activation=False,\n        )\n        for w in windows\n    ])",
+      "hash": "ec193dccc6434406",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0012",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "When synchronous rst is asserted high, the command FSM and bus-status state are reset: busy, al, and cmd_ack are cleared, and SCL and SDA are released.",
+      "source": "def decide(trace):\n    qualified = [\n        r for r in trace\n        if r['inputs'].get('rst') == 1 and r['inputs'].get('nReset') == 1\n    ]\n    if not qualified:\n        return (None, None, 'synchronous reset activation rst=1 with nReset=1 never occurred')\n\n    expected = {\n        'busy': 0,\n        'al': 0,\n        'cmd_ack': 0,\n        'scl_oen': 1,\n        'sda_oen': 1,\n    }\n    for row in qualified:\n        bad = [\n            '%s=%r (expected %r)' % (port, row['outputs'].get(port), value)\n            for port, value in expected.items()\n            if row['outputs'].get(port) != value\n        ]\n        if bad:\n            return (False, row['edge'],\n                    'after a rising edge with rst high and nReset high, reset outputs were wrong: '\n                    + ', '.join(bad))\n\n    return (True, qualified[-1]['edge'],\n            'all qualified synchronous-reset states had busy=0, al=0, cmd_ack=0, '\n            'scl_oen=1, and sda_oen=1')",
+      "hash": "be7c4e7fbc4db619",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0087",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "When the counter expires, the module asserts `clk_en`, which acts as the timing enable for the command FSM.",
+      "source": "def decide(trace):\n    transitions = []\n    for i in range(1, len(trace)):\n        prev = trace[i - 1]\n        row = trace[i]\n        if (prev['outputs'].get('busy') == 1 and\n                row['outputs'].get('busy') == 1 and\n                prev['outputs'].get('scl_oen') != row['outputs'].get('scl_oen')):\n            transitions.append(row)\n\n    if not transitions:\n        return (None, None,\n                'no busy-qualified scl_oen phase transition was observed; '\n                'the internal counter-expiration activation or its routed effect '\n                'did not occur in this trace')\n\n    first = transitions[0]\n    return (True, first['edge'],\n            f'observed {len(transitions)} busy-qualified scl_oen phase transition(s), '\n            'the declared-port signature of FSM advancement enabled by the timing tick')",
+      "hash": "139a342bf3df23e3",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0108",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "The FSM then releases SCL high, enables SDA arbitration checking during the stable high phase, pulls SCL low again, returns to `idle`, and pulses `cmd_ack`.",
+      "source": "from specflow.refmodel.temporal import TO_END, after, edges, eventually, worst\n\ndef decide(trace):\n    def holds(cond):\n        def predicate(row):\n            return all(\n                row['outputs'].get(port, row['inputs'].get(port)) == value\n                for port, value in cond.items()\n            )\n        return predicate\n\n    def any_alt(alternatives):\n        predicates = [holds(condition) for condition in alternatives]\n        return lambda row: any(predicate(row) for predicate in predicates)\n\n    aborts = any_alt([\n        {'al': 1},\n        {'nReset': 0},\n        {'rst': 1},\n    ])\n\n    # No command encoding is specified.  Use the observable release action\n    # as the trigger signature for the WRITE sequence.\n    scl_release = edges(trace, 'scl_oen', 'rise')\n    scl_pull_low = edges(trace, 'scl_oen', 'fall')\n    ack_rise = edges(trace, 'cmd_ack', 'rise')\n    ack_fall = edges(trace, 'cmd_ack', 'fall')\n\n    windows = after(\n        trace,\n        lambda row: row['edge'] in scl_release,\n        until=holds({'cmd_ack': 1}),\n        aborts=aborts,\n    )\n\n    checks = [\n        eventually(\n            window,\n            lambda row: (\n                row['edge'] in scl_pull_low\n                and row['outputs'].get('cmd_ack') != 1\n            ),\n            after_activation=True,\n            strong=True,\n        )\n        for window in windows\n    ]\n\n    checks.extend(\n        eventually(\n            window,\n            lambda row: row['edge'] in ack_rise,\n            after_activation=True,\n            strong=True,\n        )\n        for window in windows\n    )\n\n    # The acknowledgement must be a pulse, not a level that remains high.\n    ack_windows = after(\n        trace,\n        lambda row: row['edge'] in ack_rise,\n        until=TO_END,\n        aborts=aborts,\n    )\n    checks.extend(\n        eventually(\n            window,\n            lambda row: row['edge'] in ack_fall,\n            after_activation=True,\n            strong=True,\n        )\n        for window in ack_windows\n    )\n\n    return worst(checks)",
+      "hash": "25a8e78b769798c4",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0099",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "For a START command, the FSM releases SDA and SCL as needed, then pulls SDA low while SCL is high to generate a valid I2C START condition. After that, it pulls SCL low, returns to `idle`, and asserts `cmd_ack` for one clock cycle to indicate command completion.",
+      "source": "def decide(trace):\n    def out(row, port):\n        return row['outputs'].get(port)\n\n    def aborted(row):\n        return (row['outputs'].get('al') == 1 or\n                row['inputs'].get('nReset') == 0 or\n                row['inputs'].get('rst') == 1)\n\n    # With no declared cmd encoding, use the START-shaped output signature.\n    candidates = []\n    for i in range(1, len(trace)):\n        prev = trace[i - 1]\n        cur = trace[i]\n        if (out(prev, 'sda_oen') != 0 and\n                out(cur, 'sda_oen') == 0 and\n                out(cur, 'scl_oen') == 1 and\n                not aborted(cur)):\n            candidates.append(i)\n\n    if not candidates:\n        return (None, None,\n                'START command encoding is unspecified and no START-shaped SDA pull-low transition occurred')\n\n    i = candidates[0]\n    if aborted(trace[i]):\n        return (None, trace[i]['edge'], 'START-shaped attempt was aborted')\n\n    if not (out(trace[i - 1], 'sda_oen') == 1 and\n            out(trace[i - 1], 'scl_oen') == 1):\n        return (False, trace[i]['edge'],\n                'START sequence did not first have sda_oen=1 and scl_oen=1 before SDA was pulled low')\n\n    for k in range(i + 1, len(trace)):\n        if aborted(trace[k]):\n            return (None, trace[k]['edge'], 'START sequence was aborted before completion')\n        if out(trace[k], 'cmd_ack') == 1:\n            return (False, trace[k]['edge'],\n                    'cmd_ack asserted before scl_oen was pulled low')\n\n    scl_fall = None\n    for j in range(i + 1, len(trace)):\n        if (out(trace[j - 1], 'scl_oen') != 0 and\n                out(trace[j], 'scl_oen') == 0):\n            scl_fall = j\n            break\n\n    if scl_fall is None:\n        return (False, trace[i]['edge'],\n                'SDA was pulled low for START, but scl_oen never fell to 0 afterward')\n\n    ack = None\n    for k in range(scl_fall + 1, len(trace)):\n        if aborted(trace[k]):\n            return (None, trace[k]['edge'], 'START sequence was aborted before cmd_ack')\n        if out(trace[k], 'cmd_ack') == 1:\n            ack = k\n            break\n\n    if ack is None:\n        return (False, trace[scl_fall]['edge'],\n                'START completed its SCL-low step but cmd_ack never asserted')\n\n    if trace[ack].get('held') != 1:\n        return (False, trace[ack]['edge'],\n                f\"cmd_ack was high for {trace[ack].get('held')} edges, expected exactly one clock cycle\")\n\n    if ack + 1 < len(trace) and out(trace[ack + 1], 'cmd_ack') == 1:\n        return (False, trace[ack + 1]['edge'],\n                'cmd_ack remained high beyond the required one-clock pulse')\n\n    return (True, trace[ack]['edge'],\n            'START-shaped sequence released SDA and SCL, pulled SDA low while SCL was released, pulled SCL low, and asserted cmd_ack for exactly one clock cycle')",
+      "hash": "00b2d453d83df8d9",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0100",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "During execution of a STOP command, sda_oen must be asserted low first and scl_oen must then be deasserted high.",
+      "source": "def decide(trace):\n    def out(row, port):\n        return row.get('outputs', {}).get(port)\n\n    def active(row):\n        ins = row.get('inputs', {})\n        return ins.get('ena') == 1 and ins.get('nReset') == 1 and ins.get('rst') == 0\n\n    activations = []\n    for i, row in enumerate(trace):\n        if not active(row) or out(row, 'busy') != 1:\n            continue\n        prev = trace[i - 1] if i else None\n        if prev is None or not active(prev) or out(prev, 'busy') != 1:\n            activations.append(i)\n\n    if not activations:\n        return (None, None, 'STOP execution signature never occurred: busy did not rise while enabled and out of reset')\n\n    for start in activations:\n        sda_index = None\n        for i in range(start, len(trace)):\n            if not active(trace[i]):\n                break\n            prev = trace[i - 1] if i else None\n            if out(trace[i], 'sda_oen') == 0 and (prev is None or out(prev, 'sda_oen') != 0):\n                sda_index = i\n                break\n\n        if sda_index is None:\n            return (False, trace[start]['edge'], 'sda_oen never asserted low after the command sequence began')\n\n        scl_index = None\n        for i in range(sda_index + 1, len(trace)):\n            if not active(trace[i]):\n                break\n            if out(trace[i], 'scl_oen') == 1 and out(trace[i - 1], 'scl_oen') != 1:\n                scl_index = i\n                break\n\n        if scl_index is None:\n            return (False, trace[sda_index]['edge'], 'scl_oen was not released high after sda_oen was asserted low')\n\n    return (True, trace[activations[0]]['edge'], 'sda_oen was asserted low before scl_oen transitioned high')",
+      "hash": "0c3754e44fcadb8c",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0056",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "10. Command FSM: The FSM advances only when `clk_en` is asserted.",
+      "source": "def decide(trace):\n    # `scl_oen` is the only routed declared output for this requirement.\n    # Its changes reveal phase advances, but no declared trace port reveals\n    # whether the internal `clk_en` was asserted for those advances.\n    observed = [\n        r for i, r in enumerate(trace)\n        if i > 0\n        and r['outputs'].get('scl_oen') != trace[i - 1]['outputs'].get('scl_oen')\n    ]\n    if observed:\n        return (None, observed[0]['edge'],\n                'scl_oen phase advance observed, but internal clk_en gating is not observable')\n    return (None, None,\n            'scl_oen did not reveal a phase advance, and internal clk_en gating is not observable')",
+      "hash": "baf5e5d2800dafab",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0113",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "At the end of every START, STOP, READ, or WRITE sequence, `cmd_ack` is asserted for exactly one `clk` cycle.",
+      "source": "def decide(trace):\n    valid = lambda r: (\n        r['inputs'].get('ena') == 1\n        and r['inputs'].get('nReset') != 0\n        and r['inputs'].get('rst') != 1\n    )\n\n    pulses = []\n    i = 0\n    while i < len(trace):\n        row = trace[i]\n        if row['outputs'].get('cmd_ack') != 1 or not valid(row):\n            i += 1\n            continue\n\n        start = row\n        duration = 0\n        j = i\n        while (j < len(trace)\n               and trace[j]['outputs'].get('cmd_ack') == 1\n               and valid(trace[j])):\n            duration += trace[j].get('held', 1)\n            j += 1\n\n        if j == len(trace):\n            return (None, start['edge'],\n                    'cmd_ack pulse reaches the trace end; its exact duration is unknown')\n        if duration != 1:\n            return (False, start['edge'],\n                    f'cmd_ack was high for {duration} clock edges, expected exactly one')\n        pulses.append(start)\n        i = j\n\n    if not pulses:\n        return (None, None,\n                'no enabled, out-of-reset cmd_ack pulse was observed; command completion is not identifiable in this trace')\n\n    return (True, pulses[-1]['edge'],\n            f'{len(pulses)} enabled cmd_ack pulse(s) observed, each high for exactly one clock edge')",
+      "hash": "4b0b1917bec0dfd9",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0105",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "After the read bit cycle completes, the FSM returns to `idle` and asserts `cmd_ack`.",
+      "source": "from specflow.refmodel.temporal import TO_END, after, edges, eventually, worst\n\ndef decide(trace):\n    rises = edges(trace, \"scl_i\", \"rise\")\n    windows = after(\n        trace,\n        lambda r: r[\"edge\"] in rises and r[\"outputs\"].get(\"scl_oen\") == 1,\n        until=TO_END,\n    )\n    follows = False\n    return worst([\n        eventually(\n            w,\n            lambda r: r[\"outputs\"].get(\"cmd_ack\") == 1,\n            after_activation=follows,\n            strong=True,\n        )\n        for w in windows\n    ])",
+      "hash": "be3423f4de5a504d",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0043",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "The module reloads its internal timing counter from the prescale value and restarts its SCL low-period timing to synchronize its bit-timing to the shared bus clock.",
+      "source": "def decide(trace):\n    from specflow.refmodel.temporal import TO_END, after, edges, eventually, worst\n\n    scl_falls = edges(trace, \"scl_i\", \"fall\")\n    scl_oen_falls = edges(trace, \"scl_oen\", \"fall\")\n\n    windows = after(\n        trace,\n        lambda r: r[\"edge\"] in scl_falls\n        and r[\"outputs\"].get(\"scl_oen\") == 1,\n        until=TO_END,\n    )\n\n    return worst([\n        eventually(\n            w,\n            lambda r: r[\"edge\"] in scl_oen_falls,\n            strong=True,\n            after_activation=True,\n        )\n        for w in windows\n    ])",
+      "hash": "d2713da34bb8c82a",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0014",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "The i2c_master_bit_ctrl module's ena input gates normal timing and input-filter operation: when ena is low the module reloads the internal clock-divider counter and resets the input filter counter, preventing normal bit-timing progression.",
+      "source": "def decide(trace):\n    from specflow.refmodel.temporal import WHILE_ACTIVE, after, throughout, worst\n\n    def _low_cmd(row, value):\n        return (row['inputs'].get('ena') == 0 and\n                row['inputs'].get('cmd') == value)\n\n    def _high_progress(value):\n        for i, row in enumerate(trace):\n            if (row['inputs'].get('ena') != 1 or\n                    row['inputs'].get('cmd') != value or\n                    row['outputs'].get('busy') != 0):\n                continue\n            j = i + 1\n            while j < len(trace):\n                nxt = trace[j]\n                if (nxt['inputs'].get('ena') != 1 or\n                        nxt['inputs'].get('cmd') != value):\n                    break\n                if (nxt['outputs'].get('busy') == 1 or\n                        nxt['outputs'].get('cmd_ack') == 1):\n                    return True\n                j += 1\n        return False\n\n    values = sorted({r['inputs'].get('cmd') for r in trace\n                     if 'cmd' in r.get('inputs', {})})\n    verdicts = []\n    for value in values:\n        windows = after(\n            trace,\n            lambda r, v=value: _low_cmd(r, v),\n            until=WHILE_ACTIVE)\n        for w in windows:\n            if not w.rows or w.rows[0]['outputs'].get('busy') != 0:\n                continue\n            if not _high_progress(value):\n                continue\n            verdicts.append(\n                throughout(\n                    w,\n                    lambda r: (r['outputs'].get('busy') == 0 and\n                               r['outputs'].get('cmd_ack') == 0),\n                    after_activation=False))\n\n    if not verdicts:\n        return (None, None,\n                'ena-low idle command signature was not exercised with a matching ena-high progressing command')\n    return worst(verdicts)",
+      "hash": "b6c9809a66635052",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0046",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "The filtered outputs `sSCL` and `sSDA` are generated using a majority function over the three-sample histories.",
+      "source": "def decide(trace):\n    # busy is the declared indirect observation route for this requirement.\n    # The trace does not expose filter-sample boundaries, so a busy value\n    # cannot be classified as the short-glitch or majority-filter case.\n    busy_rows = [r for r in trace if 'busy' in r.get('outputs', {})]\n    if not busy_rows:\n        return (None, None, 'declared observation port busy is absent from this trace')\n    return (None, None, 'busy is observable, but filter-sample intervals and internal sSCL/sSDA histories are not exposed')",
+      "hash": "422145395c03ee90",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0068",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "On asynchronous reset nReset = 0, or synchronous reset rst = 1, the reset outputs are released or cleared: scl_oen and sda_oen are high, while cmd_ack, al, and busy are low.",
+      "source": "from specflow.refmodel.temporal import WHILE_ACTIVE, after, throughout, worst\n\n\ndef _reset_asserted(row):\n    inputs = row['inputs']\n    return inputs.get('nReset') == 0 or inputs.get('rst') == 1\n\n\ndef _reset_outputs(row):\n    outputs = row['outputs']\n    return (\n        outputs.get('scl_oen') == 1\n        and outputs.get('sda_oen') == 1\n        and outputs.get('cmd_ack') == 0\n        and outputs.get('al') == 0\n        and outputs.get('busy') == 0\n    )\n\n\ndef decide(trace):\n    windows = after(trace, _reset_asserted, until=WHILE_ACTIVE)\n    return worst([\n        throughout(w, _reset_outputs, after_activation=False)\n        for w in windows\n    ])",
+      "hash": "728de763c805fce2",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0088",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "The FSM only advances to the next bit-timing phase when `clk_en` is asserted.",
+      "source": "def decide(trace):\n    # scl_oen is the routed observation, but no declared port exposes\n    # clk_en or the counter-expiry event that must authorize a phase change.\n    _observed = [r['outputs'].get('scl_oen') for r in trace]\n    return (None, None,\n            'cannot decide: clk_en and the counter-expiry boundary are internal; '\n            'scl_oen changes alone cannot prove that the phase advance was enabled')",
+      "hash": "c8aec97fad3bfead",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0051",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "The module asserts the al (arbitration-lost) output when, during SDA arbitration checking, the controller expects SDA to be released high but the filtered SDA signal is observed low.",
+      "source": "from specflow.refmodel.temporal import WHILE_ACTIVE, after, throughout, worst\n\ndef decide(trace):\n    def arbitration_check(row):\n        inputs = row['inputs']\n        outputs = row['outputs']\n        return (\n            inputs.get('ena') == 1 and\n            inputs.get('nReset') == 1 and\n            inputs.get('rst') == 0 and\n            inputs.get('sda_i') == 0 and\n            outputs.get('scl_oen') == 1 and\n            outputs.get('sda_oen') == inputs.get('din')\n        )\n\n    windows = after(trace, arbitration_check, until=WHILE_ACTIVE)\n    return worst([\n        throughout(w, lambda r: r['outputs'].get('al') == 1,\n                   after_activation=False)\n        for w in windows\n    ])",
+      "hash": "f70a204baf767a04",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0011",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "All synchronous state updates in the i2c_master_bit_ctrl module shall be driven by the rising edge of the system clock input clk.",
+      "source": "def decide(trace):\n    sampled_cmd_ack = [row['outputs']['cmd_ack'] for row in trace]\n    return (None, None, 'cmd_ack is sampled only at rising-edge states; the trace cannot reveal whether its updates occurred between rising edges')",
+      "hash": "ed3587891be6cee5",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0004",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "The outputs `scl_o` and `sda_o` are constant low drive values, while `scl_oen` and `sda_oen` are active-low output-enable controls.",
+      "source": "def decide(trace):\n    if not trace:\n        return (None, None, 'module output assignments were not observed in this trace')\n\n    for row in trace:\n        outputs = row.get('outputs', {})\n        for port in ('scl_o', 'sda_o'):\n            if outputs.get(port) != 0:\n                return (\n                    False,\n                    row.get('edge'),\n                    f'{port} is not constant low; expected logic 0 at each observation'\n                )\n\n    return (\n        True,\n        None,\n        'scl_o and sda_o remained constant logic 0 at every observation; '\n        'active-low output-enable semantics are not independently falsifiable '\n        'from the declared output trace'\n    )",
+      "hash": "9376b30d8dfd8de3",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0076",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "These filtered signals are treated as the stable internal versions of the I2C SCL and SDA lines.",
+      "source": "def decide(trace):\n    from specflow.refmodel.temporal import TO_END, after, edges, eventually, worst\n\n    falling = edges(trace, 'sda_i', 'fall')\n    rising = edges(trace, 'sda_i', 'rise')\n\n    def candidate(row, edge_set):\n        return row['edge'] in edge_set and row['inputs'].get('scl_i') == 1\n\n    fall_windows = after(\n        trace,\n        lambda r: candidate(r, falling),\n        until=TO_END)\n    rise_windows = after(\n        trace,\n        lambda r: candidate(r, rising),\n        until=TO_END)\n\n    checks = []\n    for w in fall_windows:\n        checks.append(eventually(\n            w,\n            lambda r: r['outputs'].get('busy') == 1,\n            after_activation=False,\n            strong=False))\n    for w in rise_windows:\n        checks.append(eventually(\n            w,\n            lambda r: r['outputs'].get('busy') == 0,\n            after_activation=False,\n            strong=False))\n\n    return worst(checks)",
+      "hash": "7d861b3a93290196",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0102",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "For a READ command, the FSM releases SDA so the external slave can drive the data bit.",
+      "source": "def decide(trace):\n    # sda_oen is the declared observable, but no independent READ\n    # activation is identifiable: cmd's symbolic encoding is unspecified.\n    for row in trace:\n        _ = row['outputs'].get('sda_oen')\n    return (None, None, 'READ activation is not identifiable: cmd has no declared encoding table and no independent output signature was provided')",
+      "hash": "d08add6942f48cf8",
+      "evidence": "7cbfda6547196d62"
+    },
+    {
+      "req_uid": "REQ-0024",
+      "tp_uids": [
+        "TP-start",
+        "TP-write",
+        "TP-read",
+        "TP-stop",
+        "TP-arb",
+        "TP-slow",
+        "TP-nostart"
+      ],
+      "clause": "busy is set after a START condition is detected and remains set until it is cleared after a STOP condition is detected",
+      "source": "def decide(trace):\n    from specflow.refmodel.temporal import TO_END, after, edges, eventually, throughout, worst\n\n    def any_cond(alts):\n        def pred(row):\n            for cond in alts:\n                if all(row['outputs'].get(p, row['inputs'].get(p)) == v\n                       for p, v in cond.items()):\n                    return True\n            return False\n        return pred\n\n    start_falls = edges(trace, 'sda_i', 'fall')\n    stop_rises = edges(trace, 'sda_i', 'rise')\n\n    def start(row):\n        return row['edge'] in start_falls and row['inputs'].get('scl_i') == 1\n\n    def stop(row):\n        return row['edge'] in stop_rises and row['inputs'].get('scl_i') == 1\n\n    aborts = any_cond([{'nReset': 0}, {'rst': 1}])\n\n    busy_windows = after(trace, start, until=stop, aborts=aborts)\n    set_checks = [\n        eventually(w, lambda r: r['outputs'].get('busy') == 1,\n                   after_activation=True, strong=True)\n        for w in busy_windows\n    ]\n    hold_checks = [\n        throughout(w, lambda r: r['outputs'].get('busy') == 1,\n                   after_activation=True)\n        for w in busy_windows\n    ]\n\n    clear_windows = after(trace, stop, until=TO_END, aborts=aborts)\n    clear_checks = [\n        eventually(w, lambda r: r['outputs'].get('busy') == 0,\n                   after_activation=True, strong=True)\n        for w in clear_windows\n    ]\n\n    return worst(set_checks + hold_checks + clear_checks)",
+      "hash": "dcc6980250874ec4",
+      "evidence": "7cbfda6547196d62"
+    }
+  ],
+  "dispositions": {
+    "REQ-0022": "TRUSTED",
+    "REQ-0058": "VACUOUS",
+    "REQ-0045": "TRUSTED",
+    "REQ-0041": "TRUSTED",
+    "REQ-0109": "TRUSTED",
+    "REQ-0098": "TRUSTED",
+    "REQ-0009": "ABANDONED",
+    "REQ-0034": "TRUSTED",
+    "REQ-0021": "TRUSTED",
+    "REQ-0062": "TRUSTED",
+    "REQ-0065": "TRUSTED",
+    "REQ-0038": "TRUSTED",
+    "REQ-0091": "TRUSTED",
+    "REQ-0093": "TRUSTED",
+    "REQ-0086": "TRUSTED",
+    "REQ-0023": "TRUSTED",
+    "REQ-0048": "TRUSTED",
+    "REQ-0081": "TRUSTED",
+    "REQ-0052": "TRUSTED",
+    "REQ-0029": "TRUSTED",
+    "REQ-0012": "TRUSTED",
+    "REQ-0087": "TRUSTED",
+    "REQ-0108": "TRUSTED",
+    "REQ-0099": "TRUSTED",
+    "REQ-0100": "TRUSTED",
+    "REQ-0056": "TRUSTED",
+    "REQ-0113": "TRUSTED",
+    "REQ-0105": "TRUSTED",
+    "REQ-0043": "TRUSTED",
+    "REQ-0014": "TRUSTED",
+    "REQ-0046": "TRUSTED",
+    "REQ-0068": "TRUSTED",
+    "REQ-0088": "TRUSTED",
+    "REQ-0051": "TRUSTED",
+    "REQ-0011": "TRUSTED",
+    "REQ-0004": "TRUSTED",
+    "REQ-0076": "TRUSTED",
+    "REQ-0102": "TRUSTED",
+    "REQ-0060": "ABANDONED",
+    "REQ-0024": "TRUSTED"
+  },
+  "reasons": {
+    "REQ-0058": "vacuous: this check cannot fail. no legal value of scl_oen, sda_oen, near or far, changes the verdict on any testpoint it names. Every declared output it names was driven to every other legal value -- one step away and at both ends of the range, across the whole trace and at single edges -- and the verdict did not change once.\n\nThat usually means one of three things. The check reads a port to find its activation window but never ASSERTS on any port. Its comparison is true for every value the port can carry, so it restates the port's width rather than the requirement. Or its trigger cannot fire, so the body it guards never runs.\n\nRewrite it so there is some legal output value it rejects, and name that value in `reasoning`. If the requirement genuinely constrains nothing observable at the boundary, say THAT instead -- a requirement with no observable is a finding about the specification, not something to invent an assertion for.",
+    "REQ-0009": "no observation route found",
+    "REQ-0060": "no observation route found"
+  },
+  "witness": "witness",
+  "rounds": 2,
+  "variants": 0,
+  "vacuity_checked": false,
+  "correspondence_checked": true,
+  "correspondence_rounds": [
+    {
+      "round": 1,
+      "reviewed": 40,
+      "off_target": [
+        "REQ-0012",
+        "REQ-0014",
+        "REQ-0021",
+        "REQ-0023",
+        "REQ-0043",
+        "REQ-0045",
+        "REQ-0048",
+        "REQ-0051",
+        "REQ-0052",
+        "REQ-0062",
+        "REQ-0065",
+        "REQ-0068",
+        "REQ-0087",
+        "REQ-0088",
+        "REQ-0099",
+        "REQ-0100",
+        "REQ-0105",
+        "REQ-0108",
+        "REQ-0109",
+        "REQ-0113"
+      ],
+      "not_assertable": [
+        "REQ-0009",
+        "REQ-0038",
+        "REQ-0041",
+        "REQ-0056",
+        "REQ-0060",
+        "REQ-0076",
+        "REQ-0081"
+      ]
+    },
+    {
+      "round": 2,
+      "reviewed": 0,
+      "off_target": [],
+      "not_assertable": []
+    }
+  ],
+  "over_strictness_bounded_by": "witness",
+  "repairs": {
+    "REQ-0058": [
+      "vacuous: this check cannot fail. no legal value of scl_oen, sda_oen, near or far, changes the verdict on any testpoint it names. Every declared output it names was driven to every other legal value -- one step away and at both ends of the range, across the whole trace and at single edges -- and the verdict did not change once.\n\nThat usually means one of three things. The check reads a port to find its activation window but never ASSERTS on any port. Its comparison is true for every value the port can carry, so it restates the port's width rather than the requirement. Or its trigger cannot fire, so the body it guards never runs.\n\nRewrite it so there is some legal output value it rejects, and name that value in `reasoning`. If the requirement genuinely constrains nothing observable at the boundary, say THAT instead -- a requirement with no observable is a finding about the specification, not something to invent an assertion for.",
+      "repair rejected -- the replacement decided nothing on any of its 7 testpoint(s), where the previous check decided 7; the previous stands",
+      "vacuous: this check cannot fail. no legal value of scl_oen, sda_oen, near or far, changes the verdict on any testpoint it names. Every declared output it names was driven to every other legal value -- one step away and at both ends of the range, across the whole trace and at single edges -- and the verdict did not change once.\n\nThat usually means one of three things. The check reads a port to find its activation window but never ASSERTS on any port. Its comparison is true for every value the port can carry, so it restates the port's width rather than the requirement. Or its trigger cannot fire, so the body it guards never runs.\n\nRewrite it so there is some legal output value it rejects, and name that value in `reasoning`. If the requirement genuinely constrains nothing observable at the boundary, say THAT instead -- a requirement with no observable is a finding about the specification, not something to invent an assertion for."
+    ]
+  },
+  "tools": {
+    "demote_faithfulness": true,
+    "correspondence": true,
+    "variants": false,
+    "staging": true,
+    "max_repairs": 1,
+    "repair_attempts": 1
+  },
+  "corpus": {
+    "REQ-0022": [
+      {
+        "source": "def decide(trace):\n    # al is a declared output route, but its asserted behavior belongs to\n    # the linked arbitration requirement, not this interface definition.\n    _observed_al = [row.get('outputs', {}).get('al') for row in trace]\n    return (None, None, 'sda_i synchronization/filtering and internal use are not independently observable; al is owned by the linked arbitration requirement')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "3480cc5814619e13"
+      }
+    ],
+    "REQ-0058": [
+      {
+        "source": "def decide(trace):\n    controls = (\"scl_oen\", \"sda_oen\")\n\n    # Establish the released idle control state from the first state out of reset.\n    baseline = None\n    baseline_edge = None\n    for row in trace:\n        ins = row.get(\"inputs\", {})\n        if ins.get(\"nReset\") == 0 or ins.get(\"rst\") == 1:\n            continue\n        outs = row.get(\"outputs\", {})\n        if all(p in outs for p in controls):\n            baseline = tuple(outs[p] for p in controls)\n            baseline_edge = row.get(\"edge\")\n            break\n\n    if baseline is None:\n        return (None, None, \"no non-reset state with declared I2C control outputs; command sequence not observable\")\n\n    departure = None\n    for row in trace:\n        ins = row.get(\"inputs\", {})\n        if ins.get(\"nReset\") == 0 or ins.get(\"rst\") == 1:\n            continue\n        outs = row.get(\"outputs\", {})\n        if not all(p in outs for p in controls):\n            continue\n        current = tuple(outs[p] for p in controls)\n        if current != baseline:\n            departure = row\n            break\n\n    if departure is None:\n        return (None, None, \"no observable scl_oen or sda_oen departure from the released idle control state; command sequence was not exercised\")\n\n    changed = [p for p, old, new in zip(controls, baseline, (departure['outputs'][p] for p in controls)) if old != new]\n    return (True, departure.get(\"edge\"), \"observable command-sequence signature: \" + \" or \".join(changed) + \" departed from the released idle control state; exact phase values and latency are unspecified\")",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "b29fd978795d3e7b"
+      }
+    ],
+    "REQ-0045": [
+      {
+        "source": "def decide(trace):\n    if not trace:\n        return (None, None, 'the qualifying synchronized SDA transition never occurred')\n\n    triggers = []\n    for i in range(1, len(trace)):\n        prev = trace[i - 1]['inputs'].get('sda_i')\n        row = trace[i]\n        cur = row['inputs'].get('sda_i')\n        scl = row['inputs'].get('scl_i')\n        if prev == 1 and cur == 0 and scl == 1:\n            triggers.append(i)\n\n    if not triggers:\n        return (None, None, 'the qualifying synchronized SDA falling transition with SCL high never occurred')\n\n    for i in triggers:\n        for j in range(i + 1, len(trace)):\n            before = trace[j - 1]['outputs'].get('busy')\n            after = trace[j]['outputs'].get('busy')\n            if before == 0 and after == 1:\n                return (True, trace[j]['edge'], 'busy rose after the qualifying SDA transition, indicating the filter sampling effect became visible')\n\n    return (False, trace[triggers[0]]['edge'], 'busy did not rise after the qualifying SDA transition; no observable filter-sampling effect was produced')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "5203bb1ada69f2da"
+      }
+    ],
+    "REQ-0041": [
+      {
+        "source": "def decide(trace):\n    # The route applies only during an active command sequence.\n    segments = []\n    start = None\n    for i, row in enumerate(trace):\n        active = row['outputs'].get('busy') == 1\n        prev_active = i > 0 and trace[i - 1]['outputs'].get('busy') == 1\n        if active and not prev_active:\n            if start is not None:\n                segments.append((start, i))\n            start = i\n    if start is not None:\n        segments.append((start, len(trace)))\n\n    event_rows = []\n    ordinary_completion = False\n    incomplete_event = None\n\n    for begin, end in segments:\n        events = []\n        for i in range(begin, end):\n            if i == 0:\n                continue\n            prev = trace[i - 1]['inputs'].get('scl_i')\n            cur = trace[i]['inputs'].get('scl_i')\n            released = trace[i]['outputs'].get('scl_oen') == 1\n            if prev is not None and cur is not None and prev > cur and released:\n                events.append(i)\n                event_rows.append(i)\n\n        ack_rows = [\n            i for i in range(begin, end)\n            if trace[i]['outputs'].get('cmd_ack') == 1\n        ]\n\n        if not events and ack_rows:\n            ordinary_completion = True\n\n        for event in events:\n            if trace[event]['outputs'].get('cmd_ack') == 1:\n                return (False, trace[event]['edge'],\n                        'cmd_ack was asserted on the falling scl_i event; the completion pulse was not postponed')\n            later_ack = [i for i in ack_rows if i > event]\n            if later_ack:\n                continue\n            if incomplete_event is None:\n                incomplete_event = event\n\n    if not event_rows:\n        return (None, None, 'no falling scl_i transition while busy and scl_oen was high')\n    if not ordinary_completion:\n        return (None, None,\n                'the resynchronization case occurred, but no event-free command completion was observed for comparison')\n    if incomplete_event is not None:\n        return (None, trace[incomplete_event]['edge'],\n                'a falling scl_i event while scl_oen was high was observed, but the trace ended before a postponed cmd_ack completion pulse')\n\n    return (True, trace[event_rows[-1]]['edge'],\n            'falling scl_i events while busy and scl_oen high kept cmd_ack low until a later completion; an event-free completion pulse was also observed')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "132bbc941b025008"
+      }
+    ],
+    "REQ-0109": [
+      {
+        "source": "def decide(trace):\n    from specflow.refmodel.temporal import TO_END, after, edges, throughout, worst\n\n    scl_oen_changes = edges(trace, \"scl_oen\", \"change\")\n    sda_oen_changes = edges(trace, \"sda_oen\", \"change\")\n    activation_edges = scl_oen_changes | sda_oen_changes\n\n    def opens(row):\n        return row[\"edge\"] in activation_edges\n\n    def reset_active(row):\n        return row[\"inputs\"].get(\"nReset\") == 0 or row[\"inputs\"].get(\"rst\") == 1\n\n    windows = after(\n        trace,\n        opens,\n        until=TO_END,\n        aborts=reset_active,\n    )\n\n    def open_drain_levels(row):\n        outputs = row[\"outputs\"]\n        return outputs.get(\"scl_o\") == 0 and outputs.get(\"sda_o\") == 0\n\n    return worst([\n        throughout(w, open_drain_levels, after_activation=False)\n        for w in windows\n    ])",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "25f20cbb890794d7"
+      }
+    ],
+    "REQ-0098": [
+      {
+        "source": "def decide(trace):\n    # The required activation is the internal FSM's idle state, which is not\n    # declared in the trace.  The command encoding and clk_en condition are\n    # also unspecified or unavailable, so no sound window can be opened.\n    # `busy` is declared, but its route belongs to another requirement and\n    # cannot by itself distinguish idle from every other non-busy situation.\n    _declared_busy_observation = [\n        row.get('outputs', {}).get('busy') for row in trace\n    ]\n    return (None, None,\n            'cannot decide: the idle-state activation and clk_en are not declared, '\n            'and no cmd encoding table identifies recognized commands')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "2366ec6a4b29d045"
+      }
+    ],
+    "REQ-0009": [
+      {
+        "source": "def decide(trace):\n    # cmd_ack is a declared output port, but this interface declaration\n    # licenses no expectation about its value.\n    for row in trace:\n        _ = row.get('outputs', {}).get('cmd_ack')\n    return (None, None, 'input-port declaration is not decidable from trace behaviour; cmd_ack has no licensed expectation')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "ddec76b8efe57d44"
+      }
+    ],
+    "REQ-0034": [
+      {
+        "source": "from specflow.refmodel.temporal import WHILE_ACTIVE, after, throughout, worst\n\n\ndef _level(port, value):\n    return lambda row: row['outputs'].get(port) == value\n\n\ndef decide(trace):\n    checks = []\n    cases = [\n        ('scl_oen', 0, 'scl_o', 0),\n        ('sda_oen', 0, 'sda_o', 0),\n    ]\n\n    for enable, enable_value, line, line_value in cases:\n        windows = after(\n            trace,\n            _level(enable, enable_value),\n            until=WHILE_ACTIVE,\n        )\n        checks.extend(\n            throughout(\n                window,\n                _level(line, line_value),\n            )\n            for window in windows\n        )\n\n    result = worst(checks)\n    if result[0] is None:\n        return (None, None, 'no low output-enable state occurred; the pulled-low cases were not exercised')\n    return result",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "c04d14a39a89f535"
+      }
+    ],
+    "REQ-0021": [
+      {
+        "source": "def decide(trace):\n    from specflow.refmodel.temporal import TO_END, after, edges, eventually, throughout, worst\n\n    def low_stretch(row):\n        return (row['inputs'].get('scl_i') == 0 and\n                row['outputs'].get('scl_oen') == 1)\n\n    def scl_high(row):\n        return row['inputs'].get('scl_i') == 1\n\n    low_windows = after(trace, low_stretch, until=scl_high)\n    rises = edges(trace, 'scl_i', 'rise')\n    rise_windows = after(\n        trace,\n        lambda row: (row['edge'] in rises and\n                     row['inputs'].get('scl_i') == 1 and\n                     row['outputs'].get('scl_oen') == 1),\n        until=TO_END)\n\n    if not low_windows or not rise_windows:\n        edge = (low_windows[0].edge if low_windows else\n                rise_windows[0].edge if rise_windows else None)\n        return (None, edge,\n                'the stretch-and-release signature was not fully exercised')\n\n    held = [\n        throughout(\n            window,\n            lambda row: row['outputs'].get('scl_oen') == 1,\n            after_activation=False)\n        for window in low_windows\n    ]\n    advances = [\n        eventually(\n            window,\n            lambda row: row['outputs'].get('scl_oen') == 0,\n            strong=True,\n            after_activation=True)\n        for window in rise_windows\n    ]\n    return worst(held + advances)",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "a16693daf5b6c8bd"
+      }
+    ],
+    "REQ-0062": [
+      {
+        "source": "def decide(trace):\n    from specflow.refmodel.temporal import after, edges, sequence, worst\n\n    def any_condition(alternatives):\n        def predicate(row):\n            return any(\n                all(row['outputs'].get(port, row['inputs'].get(port)) == value\n                    for port, value in condition.items())\n                for condition in alternatives\n            )\n        return predicate\n\n    # No cmd encoding table is declared.  Use the STOP-shaped output signature\n    # rather than inventing a numeric cmd encoding.\n    sda_driven = edges(trace, 'sda_oen', 'fall')\n    scl_released = edges(trace, 'scl_oen', 'rise')\n    sda_released = edges(trace, 'sda_oen', 'rise')\n\n    opens = lambda row: (\n        row['edge'] in sda_driven\n        and row['outputs'].get('sda_oen') == 0\n        and row['inputs'].get('ena') == 1\n    )\n    aborts = any_condition([\n        {'nReset': 0},\n        {'rst': 1},\n    ])\n\n    windows = after(\n        trace,\n        opens,\n        until=lambda row: row['outputs'].get('cmd_ack') == 1,\n        aborts=aborts,\n    )\n\n    def released_scl(row):\n        return (\n            row['edge'] in scl_released\n            and row['outputs'].get('scl_oen') == 1\n        )\n\n    def released_sda_while_scl_high(row):\n        return (\n            row['edge'] in sda_released\n            and row['outputs'].get('sda_oen') == 1\n            and row['outputs'].get('scl_oen') == 1\n        )\n\n    def acknowledged(row):\n        return row['outputs'].get('cmd_ack') == 1\n\n    return worst([\n        sequence(\n            window,\n            released_scl,\n            released_sda_while_scl_high,\n            acknowledged,\n            strong=True,\n            after_activation=True,\n        )\n        for window in windows\n    ])",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "b9411b8b231508f6"
+      }
+    ],
+    "REQ-0065": [
+      {
+        "source": "def decide(trace):\n    from specflow.refmodel.temporal import TO_END, after, eventually, worst\n\n    def holds(cond):\n        def predicate(row):\n            return all(\n                row['outputs'].get(port, row['inputs'].get(port)) == value\n                for port, value in cond.items()\n            )\n        return predicate\n\n    def any_condition(alternatives):\n        predicates = [holds(condition) for condition in alternatives]\n        return lambda row: any(predicate(row) for predicate in predicates)\n\n    # No command encoding is stated.  Use the declared output signature of\n    # the bit-level sequence instead of inventing a numeric READ command value.\n    running = holds({'busy': 1})\n    aborted = any_condition([\n        {'al': 1},\n        {'nReset': 0},\n        {'rst': 1},\n    ])\n\n    windows = after(\n        trace,\n        running,\n        until=TO_END,\n        aborts=aborted,\n    )\n\n    follows = False\n    return worst([\n        eventually(\n            window,\n            lambda row: row['outputs'].get('cmd_ack') == 1,\n            after_activation=follows,\n            strong=True,\n        )\n        for window in windows\n    ])",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "e1f0063318c23433"
+      }
+    ],
+    "REQ-0038": [
+      {
+        "source": "def decide(trace):\n    from specflow.refmodel.temporal import TO_END, after, edges, eventually, sequence, throughout, worst\n\n    scl_oen_rises = edges(trace, \"scl_oen\", \"rise\")\n\n    def stretched_release(row):\n        return (row[\"edge\"] in scl_oen_rises\n                and row[\"inputs\"].get(\"scl_i\") == 0)\n\n    windows = after(trace, stretched_release, until=TO_END)\n    follows = False\n\n    def ack_not_during_stretch(row):\n        return (row[\"inputs\"].get(\"scl_i\") != 0\n                or row[\"outputs\"].get(\"cmd_ack\") == 0)\n\n    def scl_released(row):\n        return row[\"inputs\"].get(\"scl_i\") == 1\n\n    def ack_pulses(row):\n        return row[\"outputs\"].get(\"cmd_ack\") == 1\n\n    verdicts = []\n    for w in windows:\n        verdicts.append(\n            throughout(w, ack_not_during_stretch,\n                       after_activation=follows)\n        )\n        verdicts.append(\n            sequence(w, scl_released, ack_pulses,\n                     strong=False, after_activation=follows)\n        )\n\n    return worst(verdicts)",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "92520776d5efc336"
+      }
+    ],
+    "REQ-0091": [
+      {
+        "source": "def decide(trace):\n    checks = []\n    for row in trace:\n        inputs = row['inputs']\n        outputs = row['outputs']\n\n        # Arbitration-checking signature: busy while SDA is released.\n        # sda_i is used only to qualify the condition being checked.\n        in_check = (\n            inputs.get('nReset') != 0 and\n            inputs.get('rst') != 1 and\n            outputs.get('busy') == 1 and\n            outputs.get('sda_oen') == 1 and\n            inputs.get('sda_i') == 0\n        )\n        if in_check:\n            checks.append(row)\n\n    if not checks:\n        return (None, None,\n                'arbitration-checking condition with released SDA and observed low sda_i never occurred')\n\n    for row in checks:\n        if row['outputs'].get('al') != 1:\n            return (False, row['edge'],\n                    'during arbitration checking, sda_i was low while SDA was released but al was not asserted high')\n\n    return (True, checks[-1]['edge'],\n            f'al was asserted high for all {len(checks)} applicable arbitration-checking state(s)')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "e75034c2c582f270"
+      }
+    ],
+    "REQ-0093": [
+      {
+        "source": "def decide(trace):\n    from specflow.refmodel.temporal import TO_END, after, eventually, worst\n\n    def applies(row):\n        return row['outputs'].get('al') == 1\n\n    def released(row):\n        return (row['outputs'].get('scl_oen') == 1 and\n                row['outputs'].get('sda_oen') == 1)\n\n    windows = after(trace, applies, until=TO_END)\n    return worst([\n        eventually(w, released, strong=True, after_activation=False)\n        for w in windows\n    ])",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "95d245ce18a83902"
+      }
+    ],
+    "REQ-0086": [
+      {
+        "source": "def decide(trace):\n    # `busy` is the declared output signature for an active command sequence.\n    active = [r for r in trace if r['outputs'].get('busy') == 1]\n    if not active:\n        return (None, None, 'no active command sequence was observed (busy never asserted)')\n\n    transitions = []\n    previous = None\n    elapsed = 0\n    configured = None\n\n    for row in trace:\n        busy = row['outputs'].get('busy') == 1\n        scl_oen = row['outputs'].get('scl_oen')\n        clk_cnt = row['inputs'].get('clk_cnt')\n        held = row.get('held', 1)\n\n        if not busy:\n            previous = None\n            elapsed = 0\n            configured = None\n            continue\n\n        if previous is None:\n            previous = scl_oen\n            elapsed = held\n            configured = clk_cnt\n            continue\n\n        if scl_oen != previous:\n            transitions.append((row, elapsed, configured))\n            previous = scl_oen\n            elapsed = held\n            configured = clk_cnt\n        else:\n            elapsed += held\n\n    if len(transitions) < 2:\n        return (None, None, 'active sequence observed, but no successive scl_oen phase boundaries were available')\n\n    for row, interval, prescale in transitions:\n        if isinstance(prescale, int) and interval < prescale:\n            return (False, row['edge'],\n                    f'scl_oen phase transition occurred after {interval} edges, before the configured clk_cnt interval of {prescale}')\n\n    return (True, transitions[-1][0]['edge'],\n            f'{len(transitions)} scl_oen phase transitions were separated by at least their configured clk_cnt intervals')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "eff8aa8e387a6069"
+      }
+    ],
+    "REQ-0023": [
+      {
+        "source": "def decide(trace):\n    completions = []\n    for i in range(1, len(trace)):\n        prev = trace[i - 1]['outputs']\n        row = trace[i]['outputs']\n        if prev.get('busy') == 1 and row.get('busy') == 0:\n            completions.append(i)\n\n    if not completions:\n        return (None, None, 'no command completion signature was observed: busy did not transition from asserted to deasserted')\n\n    for i in completions:\n        row = trace[i]\n        edge = row['edge']\n        if row['outputs'].get('cmd_ack') != 1:\n            return (False, edge, 'cmd_ack was not asserted when the command completion signature occurred')\n\n        if i > 0 and trace[i - 1]['outputs'].get('cmd_ack') == 1:\n            return (False, edge, 'cmd_ack was already asserted before command completion')\n\n        total = 0\n        j = i\n        while j < len(trace) and trace[j]['outputs'].get('cmd_ack') == 1:\n            total += trace[j]['held']\n            j += 1\n\n        if total != 1:\n            return (False, edge, f'cmd_ack was asserted for {total} edges; the requirement states exactly one clk cycle')\n\n        if j == len(trace):\n            return (None, edge, 'cmd_ack was high for one observed edge, but the trace ended before deassertion could be observed')\n\n    return (True, None, 'cmd_ack was asserted for exactly one clk cycle at every observed command completion')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "553387f4c25f2228"
+      }
+    ],
+    "REQ-0048": [
+      {
+        "source": "def decide(trace):\n    start_events = []\n    ordinary_cases = []\n\n    for i, row in enumerate(trace):\n        inputs = row.get('inputs', {})\n        outputs = row.get('outputs', {})\n\n        # The activation is not applicable during reset.\n        if inputs.get('nReset') == 0 or inputs.get('rst') == 1:\n            continue\n\n        busy_now = outputs.get('busy')\n        if busy_now != 0:\n            continue\n\n        previous = trace[i - 1] if i > 0 else None\n        previous_inputs = previous.get('inputs', {}) if previous else {}\n        sda_fell = (\n            previous is not None and\n            previous_inputs.get('sda_i') == 1 and\n            inputs.get('sda_i') == 0\n        )\n\n        is_start = sda_fell and inputs.get('scl_i') == 1\n        if is_start:\n            # The route says busy is low before the START boundary and rises\n            # at that boundary.  A current low value is therefore a failure.\n            start_events.append(row)\n        else:\n            # Evidence of the ordinary route case: no START is present while\n            # busy remains low.  This is evidence only, not a second\n            # obligation asserted under this requirement.\n            ordinary_cases.append(row)\n\n    if not start_events:\n        return (None, None, 'no applicable high-SCL SDA falling transition while busy was low')\n\n    failed = []\n    for row in start_events:\n        # Re-evaluate the boundary output without using it as the trigger.\n        i = trace.index(row)\n        current_busy = trace[i].get('outputs', {}).get('busy')\n        if current_busy != 1:\n            failed.append(row)\n\n    if failed:\n        row = failed[0]\n        return (False, row['edge'], 'busy did not rise at the START boundary')\n\n    if not ordinary_cases:\n        return (None, start_events[0]['edge'], 'START behavior was seen, but no ordinary non-START route case was observed')\n\n    return (True, start_events[0]['edge'], 'busy rose at the high-SCL SDA falling START boundary; ordinary non-START behavior was also observed')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "8cdddedb6fc499af"
+      }
+    ],
+    "REQ-0081": [
+      {
+        "source": "def decide(trace):\n    rows = [r for r in trace if 'scl_oen' in r.get('outputs', {})]\n    if not rows:\n        return (None, None, 'scl_oen is absent from the trace')\n    return (None, rows[0].get('edge'), 'The obligation names no falsifiable scl_oen effect; no licensed assertion can be made.')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "a97fa92651d247be"
+      }
+    ],
+    "REQ-0052": [
+      {
+        "source": "def decide(trace):\n    events = []\n    for i, row in enumerate(trace):\n        if i == 0:\n            continue\n        prev = trace[i - 1]\n        inputs = row['inputs']\n        outputs = row['outputs']\n        prev_inputs = prev['inputs']\n        stop_event = prev_inputs.get('sda_i') == 0 and inputs.get('sda_i') == 1\n        active_non_stop_signature = (\n            inputs.get('ena') == 1 and\n            inputs.get('nReset') == 1 and\n            inputs.get('rst') == 0 and\n            outputs.get('busy') == 1 and\n            inputs.get('scl_i') == 1\n        )\n        if stop_event and active_non_stop_signature:\n            events.append(row)\n\n    if not events:\n        return (None, None, 'no STOP-shaped event occurred while the declared active non-STOP sequence signature was present')\n\n    for row in events:\n        if row['outputs'].get('al') != 1:\n            return (False, row['edge'], 'al was not asserted high when the STOP condition occurred during the active non-STOP sequence')\n\n    return (True, events[-1]['edge'], f'al was asserted for all {len(events)} qualified STOP event(s)')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "db2048367bd3a03d"
+      }
+    ],
+    "REQ-0029": [
+      {
+        "source": "from specflow.refmodel.temporal import WHILE_ACTIVE, after, throughout, worst\n\n\ndef decide(trace):\n    windows = after(\n        trace,\n        lambda r: r['outputs'].get('sda_oen') == 0,\n        until=WHILE_ACTIVE,\n    )\n    return worst([\n        throughout(\n            w,\n            lambda r: r['outputs'].get('sda_oen') == 0,\n            after_activation=False,\n        )\n        for w in windows\n    ])",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "3f35cc41b8440af4"
+      }
+    ],
+    "REQ-0012": [
+      {
+        "source": "def decide(trace):\n    qualified = [\n        r for r in trace\n        if r['inputs'].get('rst') == 1 and r['inputs'].get('nReset') == 1\n    ]\n    if not qualified:\n        return (None, None, 'synchronous reset activation rst=1 with nReset=1 never occurred')\n\n    expected = {\n        'busy': 0,\n        'al': 0,\n        'cmd_ack': 0,\n        'scl_oen': 1,\n        'sda_oen': 1,\n    }\n    for row in qualified:\n        bad = [\n            '%s=%r (expected %r)' % (port, row['outputs'].get(port), value)\n            for port, value in expected.items()\n            if row['outputs'].get(port) != value\n        ]\n        if bad:\n            return (False, row['edge'],\n                    'after a rising edge with rst high and nReset high, reset outputs were wrong: '\n                    + ', '.join(bad))\n\n    return (True, qualified[-1]['edge'],\n            'all qualified synchronous-reset states had busy=0, al=0, cmd_ack=0, '\n            'scl_oen=1, and sda_oen=1')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "a6406fffa3e177ba"
+      }
+    ],
+    "REQ-0087": [
+      {
+        "source": "def decide(trace):\n    transitions = []\n    for i in range(1, len(trace)):\n        prev = trace[i - 1]\n        row = trace[i]\n        if (prev['outputs'].get('busy') == 1 and\n                row['outputs'].get('busy') == 1 and\n                prev['outputs'].get('scl_oen') != row['outputs'].get('scl_oen')):\n            transitions.append(row)\n\n    if not transitions:\n        return (None, None,\n                'no busy-qualified scl_oen phase transition was observed; '\n                'the internal counter-expiration activation or its routed effect '\n                'did not occur in this trace')\n\n    first = transitions[0]\n    return (True, first['edge'],\n            f'observed {len(transitions)} busy-qualified scl_oen phase transition(s), '\n            'the declared-port signature of FSM advancement enabled by the timing tick')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "d0651b44c1bd3ebf"
+      }
+    ],
+    "REQ-0108": [
+      {
+        "source": "from specflow.refmodel.temporal import TO_END, after, edges, eventually, worst\n\ndef decide(trace):\n    def holds(cond):\n        def predicate(row):\n            return all(\n                row['outputs'].get(port, row['inputs'].get(port)) == value\n                for port, value in cond.items()\n            )\n        return predicate\n\n    def any_alt(alternatives):\n        predicates = [holds(condition) for condition in alternatives]\n        return lambda row: any(predicate(row) for predicate in predicates)\n\n    aborts = any_alt([\n        {'al': 1},\n        {'nReset': 0},\n        {'rst': 1},\n    ])\n\n    # No command encoding is specified.  Use the observable release action\n    # as the trigger signature for the WRITE sequence.\n    scl_release = edges(trace, 'scl_oen', 'rise')\n    scl_pull_low = edges(trace, 'scl_oen', 'fall')\n    ack_rise = edges(trace, 'cmd_ack', 'rise')\n    ack_fall = edges(trace, 'cmd_ack', 'fall')\n\n    windows = after(\n        trace,\n        lambda row: row['edge'] in scl_release,\n        until=holds({'cmd_ack': 1}),\n        aborts=aborts,\n    )\n\n    checks = [\n        eventually(\n            window,\n            lambda row: (\n                row['edge'] in scl_pull_low\n                and row['outputs'].get('cmd_ack') != 1\n            ),\n            after_activation=True,\n            strong=True,\n        )\n        for window in windows\n    ]\n\n    checks.extend(\n        eventually(\n            window,\n            lambda row: row['edge'] in ack_rise,\n            after_activation=True,\n            strong=True,\n        )\n        for window in windows\n    )\n\n    # The acknowledgement must be a pulse, not a level that remains high.\n    ack_windows = after(\n        trace,\n        lambda row: row['edge'] in ack_rise,\n        until=TO_END,\n        aborts=aborts,\n    )\n    checks.extend(\n        eventually(\n            window,\n            lambda row: row['edge'] in ack_fall,\n            after_activation=True,\n            strong=True,\n        )\n        for window in ack_windows\n    )\n\n    return worst(checks)",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "8bde1284cfa07b55"
+      }
+    ],
+    "REQ-0099": [
+      {
+        "source": "def decide(trace):\n    def out(row, port):\n        return row['outputs'].get(port)\n\n    def aborted(row):\n        return (row['outputs'].get('al') == 1 or\n                row['inputs'].get('nReset') == 0 or\n                row['inputs'].get('rst') == 1)\n\n    # With no declared cmd encoding, use the START-shaped output signature.\n    candidates = []\n    for i in range(1, len(trace)):\n        prev = trace[i - 1]\n        cur = trace[i]\n        if (out(prev, 'sda_oen') != 0 and\n                out(cur, 'sda_oen') == 0 and\n                out(cur, 'scl_oen') == 1 and\n                not aborted(cur)):\n            candidates.append(i)\n\n    if not candidates:\n        return (None, None,\n                'START command encoding is unspecified and no START-shaped SDA pull-low transition occurred')\n\n    i = candidates[0]\n    if aborted(trace[i]):\n        return (None, trace[i]['edge'], 'START-shaped attempt was aborted')\n\n    if not (out(trace[i - 1], 'sda_oen') == 1 and\n            out(trace[i - 1], 'scl_oen') == 1):\n        return (False, trace[i]['edge'],\n                'START sequence did not first have sda_oen=1 and scl_oen=1 before SDA was pulled low')\n\n    for k in range(i + 1, len(trace)):\n        if aborted(trace[k]):\n            return (None, trace[k]['edge'], 'START sequence was aborted before completion')\n        if out(trace[k], 'cmd_ack') == 1:\n            return (False, trace[k]['edge'],\n                    'cmd_ack asserted before scl_oen was pulled low')\n\n    scl_fall = None\n    for j in range(i + 1, len(trace)):\n        if (out(trace[j - 1], 'scl_oen') != 0 and\n                out(trace[j], 'scl_oen') == 0):\n            scl_fall = j\n            break\n\n    if scl_fall is None:\n        return (False, trace[i]['edge'],\n                'SDA was pulled low for START, but scl_oen never fell to 0 afterward')\n\n    ack = None\n    for k in range(scl_fall + 1, len(trace)):\n        if aborted(trace[k]):\n            return (None, trace[k]['edge'], 'START sequence was aborted before cmd_ack')\n        if out(trace[k], 'cmd_ack') == 1:\n            ack = k\n            break\n\n    if ack is None:\n        return (False, trace[scl_fall]['edge'],\n                'START completed its SCL-low step but cmd_ack never asserted')\n\n    if trace[ack].get('held') != 1:\n        return (False, trace[ack]['edge'],\n                f\"cmd_ack was high for {trace[ack].get('held')} edges, expected exactly one clock cycle\")\n\n    if ack + 1 < len(trace) and out(trace[ack + 1], 'cmd_ack') == 1:\n        return (False, trace[ack + 1]['edge'],\n                'cmd_ack remained high beyond the required one-clock pulse')\n\n    return (True, trace[ack]['edge'],\n            'START-shaped sequence released SDA and SCL, pulled SDA low while SCL was released, pulled SCL low, and asserted cmd_ack for exactly one clock cycle')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "8d1607aa7f3d469d"
+      }
+    ],
+    "REQ-0100": [
+      {
+        "source": "def decide(trace):\n    def out(row, port):\n        return row.get('outputs', {}).get(port)\n\n    def active(row):\n        ins = row.get('inputs', {})\n        return ins.get('ena') == 1 and ins.get('nReset') == 1 and ins.get('rst') == 0\n\n    activations = []\n    for i, row in enumerate(trace):\n        if not active(row) or out(row, 'busy') != 1:\n            continue\n        prev = trace[i - 1] if i else None\n        if prev is None or not active(prev) or out(prev, 'busy') != 1:\n            activations.append(i)\n\n    if not activations:\n        return (None, None, 'STOP execution signature never occurred: busy did not rise while enabled and out of reset')\n\n    for start in activations:\n        sda_index = None\n        for i in range(start, len(trace)):\n            if not active(trace[i]):\n                break\n            prev = trace[i - 1] if i else None\n            if out(trace[i], 'sda_oen') == 0 and (prev is None or out(prev, 'sda_oen') != 0):\n                sda_index = i\n                break\n\n        if sda_index is None:\n            return (False, trace[start]['edge'], 'sda_oen never asserted low after the command sequence began')\n\n        scl_index = None\n        for i in range(sda_index + 1, len(trace)):\n            if not active(trace[i]):\n                break\n            if out(trace[i], 'scl_oen') == 1 and out(trace[i - 1], 'scl_oen') != 1:\n                scl_index = i\n                break\n\n        if scl_index is None:\n            return (False, trace[sda_index]['edge'], 'scl_oen was not released high after sda_oen was asserted low')\n\n    return (True, trace[activations[0]]['edge'], 'sda_oen was asserted low before scl_oen transitioned high')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "fdf4b4b6a0d89e8b"
+      }
+    ],
+    "REQ-0056": [
+      {
+        "source": "def decide(trace):\n    # `scl_oen` is the only routed declared output for this requirement.\n    # Its changes reveal phase advances, but no declared trace port reveals\n    # whether the internal `clk_en` was asserted for those advances.\n    observed = [\n        r for i, r in enumerate(trace)\n        if i > 0\n        and r['outputs'].get('scl_oen') != trace[i - 1]['outputs'].get('scl_oen')\n    ]\n    if observed:\n        return (None, observed[0]['edge'],\n                'scl_oen phase advance observed, but internal clk_en gating is not observable')\n    return (None, None,\n            'scl_oen did not reveal a phase advance, and internal clk_en gating is not observable')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "b8fa35f64042b305"
+      }
+    ],
+    "REQ-0113": [
+      {
+        "source": "def decide(trace):\n    valid = lambda r: (\n        r['inputs'].get('ena') == 1\n        and r['inputs'].get('nReset') != 0\n        and r['inputs'].get('rst') != 1\n    )\n\n    pulses = []\n    i = 0\n    while i < len(trace):\n        row = trace[i]\n        if row['outputs'].get('cmd_ack') != 1 or not valid(row):\n            i += 1\n            continue\n\n        start = row\n        duration = 0\n        j = i\n        while (j < len(trace)\n               and trace[j]['outputs'].get('cmd_ack') == 1\n               and valid(trace[j])):\n            duration += trace[j].get('held', 1)\n            j += 1\n\n        if j == len(trace):\n            return (None, start['edge'],\n                    'cmd_ack pulse reaches the trace end; its exact duration is unknown')\n        if duration != 1:\n            return (False, start['edge'],\n                    f'cmd_ack was high for {duration} clock edges, expected exactly one')\n        pulses.append(start)\n        i = j\n\n    if not pulses:\n        return (None, None,\n                'no enabled, out-of-reset cmd_ack pulse was observed; command completion is not identifiable in this trace')\n\n    return (True, pulses[-1]['edge'],\n            f'{len(pulses)} enabled cmd_ack pulse(s) observed, each high for exactly one clock edge')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "848eb586709df7a9"
+      }
+    ],
+    "REQ-0105": [
+      {
+        "source": "from specflow.refmodel.temporal import TO_END, after, edges, eventually, worst\n\ndef decide(trace):\n    rises = edges(trace, \"scl_i\", \"rise\")\n    windows = after(\n        trace,\n        lambda r: r[\"edge\"] in rises and r[\"outputs\"].get(\"scl_oen\") == 1,\n        until=TO_END,\n    )\n    follows = False\n    return worst([\n        eventually(\n            w,\n            lambda r: r[\"outputs\"].get(\"cmd_ack\") == 1,\n            after_activation=follows,\n            strong=True,\n        )\n        for w in windows\n    ])",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "a58698559ba51840"
+      }
+    ],
+    "REQ-0043": [
+      {
+        "source": "def decide(trace):\n    from specflow.refmodel.temporal import TO_END, after, edges, eventually, worst\n\n    scl_falls = edges(trace, \"scl_i\", \"fall\")\n    scl_oen_falls = edges(trace, \"scl_oen\", \"fall\")\n\n    windows = after(\n        trace,\n        lambda r: r[\"edge\"] in scl_falls\n        and r[\"outputs\"].get(\"scl_oen\") == 1,\n        until=TO_END,\n    )\n\n    return worst([\n        eventually(\n            w,\n            lambda r: r[\"edge\"] in scl_oen_falls,\n            strong=True,\n            after_activation=True,\n        )\n        for w in windows\n    ])",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "0b8d079ae76ca0e9"
+      }
+    ],
+    "REQ-0014": [
+      {
+        "source": "def decide(trace):\n    from specflow.refmodel.temporal import WHILE_ACTIVE, after, throughout, worst\n\n    def _low_cmd(row, value):\n        return (row['inputs'].get('ena') == 0 and\n                row['inputs'].get('cmd') == value)\n\n    def _high_progress(value):\n        for i, row in enumerate(trace):\n            if (row['inputs'].get('ena') != 1 or\n                    row['inputs'].get('cmd') != value or\n                    row['outputs'].get('busy') != 0):\n                continue\n            j = i + 1\n            while j < len(trace):\n                nxt = trace[j]\n                if (nxt['inputs'].get('ena') != 1 or\n                        nxt['inputs'].get('cmd') != value):\n                    break\n                if (nxt['outputs'].get('busy') == 1 or\n                        nxt['outputs'].get('cmd_ack') == 1):\n                    return True\n                j += 1\n        return False\n\n    values = sorted({r['inputs'].get('cmd') for r in trace\n                     if 'cmd' in r.get('inputs', {})})\n    verdicts = []\n    for value in values:\n        windows = after(\n            trace,\n            lambda r, v=value: _low_cmd(r, v),\n            until=WHILE_ACTIVE)\n        for w in windows:\n            if not w.rows or w.rows[0]['outputs'].get('busy') != 0:\n                continue\n            if not _high_progress(value):\n                continue\n            verdicts.append(\n                throughout(\n                    w,\n                    lambda r: (r['outputs'].get('busy') == 0 and\n                               r['outputs'].get('cmd_ack') == 0),\n                    after_activation=False))\n\n    if not verdicts:\n        return (None, None,\n                'ena-low idle command signature was not exercised with a matching ena-high progressing command')\n    return worst(verdicts)",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "ccb1bca44f7cd9d9"
+      }
+    ],
+    "REQ-0046": [
+      {
+        "source": "def decide(trace):\n    # busy is the declared indirect observation route for this requirement.\n    # The trace does not expose filter-sample boundaries, so a busy value\n    # cannot be classified as the short-glitch or majority-filter case.\n    busy_rows = [r for r in trace if 'busy' in r.get('outputs', {})]\n    if not busy_rows:\n        return (None, None, 'declared observation port busy is absent from this trace')\n    return (None, None, 'busy is observable, but filter-sample intervals and internal sSCL/sSDA histories are not exposed')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "3546bc76990ef45d"
+      }
+    ],
+    "REQ-0068": [
+      {
+        "source": "from specflow.refmodel.temporal import WHILE_ACTIVE, after, throughout, worst\n\n\ndef _reset_asserted(row):\n    inputs = row['inputs']\n    return inputs.get('nReset') == 0 or inputs.get('rst') == 1\n\n\ndef _reset_outputs(row):\n    outputs = row['outputs']\n    return (\n        outputs.get('scl_oen') == 1\n        and outputs.get('sda_oen') == 1\n        and outputs.get('cmd_ack') == 0\n        and outputs.get('al') == 0\n        and outputs.get('busy') == 0\n    )\n\n\ndef decide(trace):\n    windows = after(trace, _reset_asserted, until=WHILE_ACTIVE)\n    return worst([\n        throughout(w, _reset_outputs, after_activation=False)\n        for w in windows\n    ])",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "b40169c8ae46cc99"
+      }
+    ],
+    "REQ-0088": [
+      {
+        "source": "def decide(trace):\n    # scl_oen is the routed observation, but no declared port exposes\n    # clk_en or the counter-expiry event that must authorize a phase change.\n    _observed = [r['outputs'].get('scl_oen') for r in trace]\n    return (None, None,\n            'cannot decide: clk_en and the counter-expiry boundary are internal; '\n            'scl_oen changes alone cannot prove that the phase advance was enabled')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "64b0f8d9c4348d06"
+      }
+    ],
+    "REQ-0051": [
+      {
+        "source": "from specflow.refmodel.temporal import WHILE_ACTIVE, after, throughout, worst\n\ndef decide(trace):\n    def arbitration_check(row):\n        inputs = row['inputs']\n        outputs = row['outputs']\n        return (\n            inputs.get('ena') == 1 and\n            inputs.get('nReset') == 1 and\n            inputs.get('rst') == 0 and\n            inputs.get('sda_i') == 0 and\n            outputs.get('scl_oen') == 1 and\n            outputs.get('sda_oen') == inputs.get('din')\n        )\n\n    windows = after(trace, arbitration_check, until=WHILE_ACTIVE)\n    return worst([\n        throughout(w, lambda r: r['outputs'].get('al') == 1,\n                   after_activation=False)\n        for w in windows\n    ])",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "ae3651d81bc5e6e7"
+      }
+    ],
+    "REQ-0011": [
+      {
+        "source": "def decide(trace):\n    sampled_cmd_ack = [row['outputs']['cmd_ack'] for row in trace]\n    return (None, None, 'cmd_ack is sampled only at rising-edge states; the trace cannot reveal whether its updates occurred between rising edges')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "bd542595e932c5bd"
+      }
+    ],
+    "REQ-0004": [
+      {
+        "source": "def decide(trace):\n    if not trace:\n        return (None, None, 'module output assignments were not observed in this trace')\n\n    for row in trace:\n        outputs = row.get('outputs', {})\n        for port in ('scl_o', 'sda_o'):\n            if outputs.get(port) != 0:\n                return (\n                    False,\n                    row.get('edge'),\n                    f'{port} is not constant low; expected logic 0 at each observation'\n                )\n\n    return (\n        True,\n        None,\n        'scl_o and sda_o remained constant logic 0 at every observation; '\n        'active-low output-enable semantics are not independently falsifiable '\n        'from the declared output trace'\n    )",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "1c166f8944ff5d0f"
+      }
+    ],
+    "REQ-0076": [
+      {
+        "source": "def decide(trace):\n    from specflow.refmodel.temporal import TO_END, after, edges, eventually, worst\n\n    falling = edges(trace, 'sda_i', 'fall')\n    rising = edges(trace, 'sda_i', 'rise')\n\n    def candidate(row, edge_set):\n        return row['edge'] in edge_set and row['inputs'].get('scl_i') == 1\n\n    fall_windows = after(\n        trace,\n        lambda r: candidate(r, falling),\n        until=TO_END)\n    rise_windows = after(\n        trace,\n        lambda r: candidate(r, rising),\n        until=TO_END)\n\n    checks = []\n    for w in fall_windows:\n        checks.append(eventually(\n            w,\n            lambda r: r['outputs'].get('busy') == 1,\n            after_activation=False,\n            strong=False))\n    for w in rise_windows:\n        checks.append(eventually(\n            w,\n            lambda r: r['outputs'].get('busy') == 0,\n            after_activation=False,\n            strong=False))\n\n    return worst(checks)",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "04da93d3cc2a35dd"
+      }
+    ],
+    "REQ-0102": [
+      {
+        "source": "def decide(trace):\n    # sda_oen is the declared observable, but no independent READ\n    # activation is identifiable: cmd's symbolic encoding is unspecified.\n    for row in trace:\n        _ = row['outputs'].get('sda_oen')\n    return (None, None, 'READ activation is not identifiable: cmd has no declared encoding table and no independent output signature was provided')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "c0d968ed27823c13"
+      }
+    ],
+    "REQ-0060": [
+      {
+        "source": "def decide(trace):\n    for row in trace:\n        _ = row['outputs'].get('cmd_ack')\n    return (None, None, 'no behavioral obligation is specified; cmd_ack is read only as a declared interface port')",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "2f0410ef56191d20"
+      }
+    ],
+    "REQ-0024": [
+      {
+        "source": "def decide(trace):\n    from specflow.refmodel.temporal import TO_END, after, edges, eventually, throughout, worst\n\n    def any_cond(alts):\n        def pred(row):\n            for cond in alts:\n                if all(row['outputs'].get(p, row['inputs'].get(p)) == v\n                       for p, v in cond.items()):\n                    return True\n            return False\n        return pred\n\n    start_falls = edges(trace, 'sda_i', 'fall')\n    stop_rises = edges(trace, 'sda_i', 'rise')\n\n    def start(row):\n        return row['edge'] in start_falls and row['inputs'].get('scl_i') == 1\n\n    def stop(row):\n        return row['edge'] in stop_rises and row['inputs'].get('scl_i') == 1\n\n    aborts = any_cond([{'nReset': 0}, {'rst': 1}])\n\n    busy_windows = after(trace, start, until=stop, aborts=aborts)\n    set_checks = [\n        eventually(w, lambda r: r['outputs'].get('busy') == 1,\n                   after_activation=True, strong=True)\n        for w in busy_windows\n    ]\n    hold_checks = [\n        throughout(w, lambda r: r['outputs'].get('busy') == 1,\n                   after_activation=True)\n        for w in busy_windows\n    ]\n\n    clear_windows = after(trace, stop, until=TO_END, aborts=aborts)\n    clear_checks = [\n        eventually(w, lambda r: r['outputs'].get('busy') == 0,\n                   after_activation=True, strong=True)\n        for w in clear_windows\n    ]\n\n    return worst(set_checks + hold_checks + clear_checks)",
+        "arm": "generate",
+        "round": 0,
+        "answered": "",
+        "frozen": false,
+        "digest": "a5a4c7aa342e73ad"
+      }
+    ]
+  },
+  "instrument_notes": {
+    "REQ-0045": {
+      "faithfulness": "off-target: The check's assertion must be tied to the filter counter controlling the synchronized-sample shift timing, using a declared port whose behavior is specifically licensed for this requirement. It must not require busy to rise, since that effect belongs to REQ-0050. The current trigger should also represent the synchronized/filter sampling situation and configured counter interval, rather than merely a raw sda_i falling edge with scl_i high."
+    },
+    "REQ-0041": {
+      "faithfulness": "not-assertable: The sentence states an effect on the internal scl_sync signal, but no declared interface port shows that effect; this is missing visibility, not a missing trigger or effect in the sentence. The check's False path for cmd_ack asserted on the falling event is unlicensed because the requirement says nothing about cmd_ack. Its assertion would need to be observed through a declared port whose behavior is explicitly specified for this synchronization event, rather than using the REQ-0113 cmd_ack completion behavior."
+    },
+    "REQ-0109": {
+      "faithfulness": "off-target: The check's trigger must be the beginning of a START, STOP, READ, or WRITE command sequence, with the window closed when that command sequence ends, rather than any scl_oen/sda_oen change and TO_END. The current check is also weaker than the full open-drain description because it does not assert that the enable signals control pull-low versus release, but that weakness does not itself make the correspondence incorrect."
+    },
+    "REQ-0009": {
+      "faithfulness": "not-assertable: The sentence has an effect—declaring the specified input ports—but that effect has no visibility in the runtime trace. The missing part is observability of the interface declaration, not a behavioral assertion about cmd_ack or any other port. The check would need access to interface metadata and would have to test the presence and input direction of clk, rst, nReset, and ena rather than inspect trace rows."
+    },
+    "REQ-0021": {
+      "faithfulness": "off-target: The check's False paths are unlicensed: REQ-0021 does not say that scl_oen must remain released while scl_i is low, nor that it must eventually become 0 after scl_i rises. The trigger and assertion should be rebuilt around an explicitly stated observable consequence of this requirement, rather than using the REQ-0063 clock-stretching trigger and scl_oen behavior; otherwise the specification must state those precise clock-stretching obligations."
+    },
+    "REQ-0062": {
+      "faithfulness": "off-target: The check has an unlicensed False path for enabled non-STOP activity beginning with an sda_oen falling edge. Its trigger must be rebuilt to identify execution of the STOP command (using a declared/established STOP activation condition), rather than using the SDA falling edge as a proxy."
+    },
+    "REQ-0065": {
+      "faithfulness": "off-target: The requirement has both a trigger and an effect, so no obligation is missing. The unlicensed False path is the check's strong eventual failure after busy starts but before the READ sequence has completed, including trace termination while the command remains in progress. Rebuild the trigger/window around the READ sequence's completion and check cmd_ack at that instant; do not use busy activation as the completion trigger or trace end as a strong response deadline."
+    },
+    "REQ-0038": {
+      "faithfulness": "not-assertable: The sentence has a trigger and an effect, but visibility is missing: slave_wait is not a declared port and no boundary-visible consequence is stated in the obligation. The check's cmd_ack assertions are unlicensed borrowing from the supporting requirement; a valid check would need either a declared slave_wait/probe port and assert it under the release-while-SCL-low trigger, or an obligation that explicitly states the cmd_ack postponement behavior."
+    },
+    "REQ-0023": {
+      "faithfulness": "off-target: The check's trigger must become the completion edge of the current bit-level START, STOP, READ, or WRITE command, with reset inactive and the core enabled as applicable, rather than every busy 1-to-0 transition. The busy transition may be used only if it is established to mean exactly that completion condition."
+    },
+    "REQ-0048": {
+      "faithfulness": "off-target: The check's False path is unlicensed because it convicts a design for not asserting busy, although this requirement only requires START detection. The trigger should represent the START condition itself, without making busy-low part of the requirement's scope, and the assertion must use a port-level indication whose relationship to START detection is stated in this requirement. Alternatively, the specification must explicitly state that busy rises at the START-detection boundary; as written, the busy assertion belongs to REQ-0050."
+    },
+    "REQ-0081": {
+      "faithfulness": "not-assertable: The sentence lacks a specified effect, and therefore lacks a falsifiable obligation. It would need to say what observable behavior must occur while bus-status detection is active, such as a required scl_oen or cmd_ack behavior."
+    },
+    "REQ-0052": {
+      "faithfulness": "off-target: The trigger must additionally establish that the current command is non-STOP, using an explicitly specified command encoding or another declared observable indication. As written, it can convict on STOP events during a STOP command, which is outside the requirement's scope."
+    },
+    "REQ-0012": {
+      "faithfulness": "off-target: The check's trigger must be restricted to the synchronous reset observation point: a rising edge of clk with rst high (and, if retaining the qualification, nReset high), with the assertion evaluated immediately after that edge. More fundamentally, the asserted output values must be justified by REQ-0012 itself or by an observation route whose effect belongs to REQ-0012; the current scl_oen, sda_oen, and related reset-value assertions are borrowed from REQ-0068. A non-rising qualified row with any expected output wrong is an unlicensed False path."
+    },
+    "REQ-0087": {
+      "faithfulness": "off-target: There is no unlicensed False path because the code never returns False. The defect is that the trigger is the already-observed busy-qualified scl_oen transition rather than the counter-expiration situation (or an observable pre-transition proxy for an active command sequence waiting at counter expiration), and the assertion must then require the permitted subsequent FSM advancement visible at scl_oen. As written, it tests the neighboring phase-transition requirement rather than REQ-0087."
+    },
+    "REQ-0108": {
+      "faithfulness": "off-target: The check's trigger must be rebuilt around the WRITE command sequence: cmd presented with the WRITE encoding while ena is 1, with the specified reset/arbitration aborts, rather than using the scl_oen release edge as the trigger. The cmd encoding must come from an authoritative interface encoding; a bare numeric value is not licensed here by the interface. The cmd_ack pulse check must also remain scoped to that WRITE window, and the unlicensed cmd_ack != 1 conjunct on the SCL pull-low edge should be removed unless the requirement is amended to state that condition."
+    },
+    "REQ-0099": {
+      "faithfulness": "off-target: The trigger is wrong: it must be the accepted START command while enabled, rather than any SDA pull-low transition with SCL released. In addition, end-of-trace absence of the later response must not itself return False; it should be treated as no verdict unless completion is explicitly made strong. The requirement's visible effect is otherwise represented by the declared ports."
+    },
+    "REQ-0100": {
+      "faithfulness": "off-target: The trigger must be restricted to a demonstrated STOP execution, such as an accepted cmd=2 command or another STOP-specific activation signature, rather than any busy rising edge. Abort/reset termination should discard the attempt or yield no verdict, and an execution that reaches the end of the trace before the response should not be convicted merely because the transition was not observed."
+    },
+    "REQ-0056": {
+      "faithfulness": "not-assertable: The sentence has a trigger and an effect, but the visibility is missing: no declared port exposes clk_en or otherwise distinguishes FSM advances made with clk_en asserted from advances made without it. scl_oen alone is insufficient to decide this relation."
+    },
+    "REQ-0113": {
+      "faithfulness": "off-target: The check's trigger must be command-sequence completion (START, STOP, READ, or WRITE), with reset/arbitration aborts handled as discarded attempts if applicable, and then it must assert that cmd_ack is high for exactly one clk cycle. Triggering on cmd_ack being high with ena active and reset inactive is not sufficient because it can convict pulses unrelated to a sequence completion."
+    },
+    "REQ-0105": {
+      "faithfulness": "off-target: The check has an unlicensed False path because its trigger is any scl_i rising edge with scl_oen == 1, while the requirement applies only after completion of a read bit cycle. Rebuild the activation/window so it opens only at the read bit cycle completion event; do not convict on earlier or unrelated released SCL rising edges. The missing FSM-idle assertion is not itself a correspondence defect because it only makes the check weaker."
+    },
+    "REQ-0043": {
+      "faithfulness": "off-target: The trigger must be restricted to the specified situation: an external scl_i falling edge caused by another master during an active WRITE bit's stable-high phase while scl_oen is 1. The strong eventual assertion must also be made weak, or otherwise given an explicitly licensed timing bound, so trace termination before the response yields no verdict rather than False."
+    },
+    "REQ-0014": {
+      "faithfulness": "off-target: The check must rebuild its trigger/window around the licensed condition: the FSM is idle, a valid command is held, `ena` is low, and the window spans the timing interval in which that command would otherwise be accepted or completed. Its assertion should check the observable consequence of prevented progression: `busy` remains deasserted where that state is required, and `cmd_ack` does not rise/pulse, rather than requiring `cmd_ack == 0` on every row. It should not convict merely because `busy` is high or `cmd_ack` is already high outside those conditions."
+    },
+    "REQ-0068": {
+      "faithfulness": "off-target: The synchronous-reset trigger must only demand the reset outputs on the next rising edge of `clk` (and thereafter while synchronous reset remains active), rather than on every row where `rst == 1`. The asynchronous `nReset == 0` path may retain immediate checking."
+    },
+    "REQ-0088": {
+      "faithfulness": "off-target: The sentence has both a trigger and an effect, but the authorization trigger (`clk_en` assertion/counter expiry) is not visible at a declared port. The check would need a declared observation of `clk_en` or the counter-expiry boundary, then open a window on phase advances or timing boundaries and assert that advancement occurs only when that authorization is present. `scl_oen` alone is insufficient."
+    },
+    "REQ-0051": {
+      "faithfulness": "off-target: The check has an overbroad trigger and window. It must trigger only on the condition that the controller expects SDA released high and filtered SDA is low, and must not require al to remain high after that condition has ended. In particular, the current sda_oen==din test admits din=0 cases, and the WHILE_ACTIVE window extends the assertion beyond the requirement's stated condition."
+    },
+    "REQ-0076": {
+      "faithfulness": "not-assertable: The sentence lacks an actionable trigger and externally visible effect: it is a definition of the filtered signals rather than an obligation on the design. The check would need a separate requirement stating what observable port behavior must result from treating sSCL and sSDA as stable filtered versions; busy-based START/STOP assertions cannot be borrowed from REQ-0050."
+    },
+    "REQ-0060": {
+      "faithfulness": "not-assertable: Both a trigger and an effect are absent: the sentence states no behavioural obligation at all."
+    }
+  },
+  "unsatisfiable_by_the_control": [],
+  "over_strict_after_repair": [],
+  "abandoned": {
+    "REQ-0009": "no observation route found",
+    "REQ-0060": "no observation route found"
+  },
+  "staging": {},
+  "stimulus_added": {},
+  "abandoned_count": 2,
+  "considered": 38,
+  "testpoints_no_oracle_names": [],
+  "unreached_silenced": {
+    "REQ-0022": "nothing was attempted",
+    "REQ-0058": "nothing was attempted",
+    "REQ-0045": "nothing was attempted",
+    "REQ-0041": "nothing was attempted",
+    "REQ-0109": "nothing was attempted",
+    "REQ-0098": "nothing was attempted",
+    "REQ-0009": "nothing was attempted",
+    "REQ-0034": "nothing was attempted",
+    "REQ-0021": "nothing was attempted",
+    "REQ-0062": "nothing was attempted",
+    "REQ-0065": "nothing was attempted",
+    "REQ-0038": "nothing was attempted",
+    "REQ-0091": "nothing was attempted",
+    "REQ-0093": "nothing was attempted",
+    "REQ-0086": "nothing was attempted",
+    "REQ-0023": "nothing was attempted",
+    "REQ-0048": "nothing was attempted",
+    "REQ-0081": "nothing was attempted",
+    "REQ-0052": "nothing was attempted",
+    "REQ-0029": "nothing was attempted",
+    "REQ-0012": "nothing was attempted",
+    "REQ-0087": "nothing was attempted",
+    "REQ-0108": "nothing was attempted",
+    "REQ-0099": "nothing was attempted",
+    "REQ-0100": "nothing was attempted",
+    "REQ-0056": "nothing was attempted",
+    "REQ-0113": "nothing was attempted",
+    "REQ-0105": "nothing was attempted",
+    "REQ-0043": "nothing was attempted",
+    "REQ-0014": "nothing was attempted",
+    "REQ-0046": "nothing was attempted",
+    "REQ-0068": "nothing was attempted",
+    "REQ-0088": "nothing was attempted",
+    "REQ-0051": "nothing was attempted",
+    "REQ-0011": "nothing was attempted",
+    "REQ-0004": "nothing was attempted",
+    "REQ-0076": "nothing was attempted",
+    "REQ-0102": "nothing was attempted",
+    "REQ-0060": "nothing was attempted",
+    "REQ-0024": "nothing was attempted"
+  },
+  "faithfulness_labels": {
+    "REQ-0045": "off-target: The check's assertion must be tied to the filter counter controlling the synchronized-sample shift timing, using a declared port whose behavior is specifically licensed for this requirement. It must not require busy to rise, since that effect belongs to REQ-0050. The current trigger should also represent the synchronized/filter sampling situation and configured counter interval, rather than merely a raw sda_i falling edge with scl_i high.",
+    "REQ-0041": "not-assertable: The sentence states an effect on the internal scl_sync signal, but no declared interface port shows that effect; this is missing visibility, not a missing trigger or effect in the sentence. The check's False path for cmd_ack asserted on the falling event is unlicensed because the requirement says nothing about cmd_ack. Its assertion would need to be observed through a declared port whose behavior is explicitly specified for this synchronization event, rather than using the REQ-0113 cmd_ack completion behavior.",
+    "REQ-0109": "off-target: The check's trigger must be the beginning of a START, STOP, READ, or WRITE command sequence, with the window closed when that command sequence ends, rather than any scl_oen/sda_oen change and TO_END. The current check is also weaker than the full open-drain description because it does not assert that the enable signals control pull-low versus release, but that weakness does not itself make the correspondence incorrect.",
+    "REQ-0009": "not-assertable: The sentence has an effect—declaring the specified input ports—but that effect has no visibility in the runtime trace. The missing part is observability of the interface declaration, not a behavioral assertion about cmd_ack or any other port. The check would need access to interface metadata and would have to test the presence and input direction of clk, rst, nReset, and ena rather than inspect trace rows.",
+    "REQ-0021": "off-target: The check's False paths are unlicensed: REQ-0021 does not say that scl_oen must remain released while scl_i is low, nor that it must eventually become 0 after scl_i rises. The trigger and assertion should be rebuilt around an explicitly stated observable consequence of this requirement, rather than using the REQ-0063 clock-stretching trigger and scl_oen behavior; otherwise the specification must state those precise clock-stretching obligations.",
+    "REQ-0062": "off-target: The check has an unlicensed False path for enabled non-STOP activity beginning with an sda_oen falling edge. Its trigger must be rebuilt to identify execution of the STOP command (using a declared/established STOP activation condition), rather than using the SDA falling edge as a proxy.",
+    "REQ-0065": "off-target: The requirement has both a trigger and an effect, so no obligation is missing. The unlicensed False path is the check's strong eventual failure after busy starts but before the READ sequence has completed, including trace termination while the command remains in progress. Rebuild the trigger/window around the READ sequence's completion and check cmd_ack at that instant; do not use busy activation as the completion trigger or trace end as a strong response deadline.",
+    "REQ-0038": "not-assertable: The sentence has a trigger and an effect, but visibility is missing: slave_wait is not a declared port and no boundary-visible consequence is stated in the obligation. The check's cmd_ack assertions are unlicensed borrowing from the supporting requirement; a valid check would need either a declared slave_wait/probe port and assert it under the release-while-SCL-low trigger, or an obligation that explicitly states the cmd_ack postponement behavior.",
+    "REQ-0023": "off-target: The check's trigger must become the completion edge of the current bit-level START, STOP, READ, or WRITE command, with reset inactive and the core enabled as applicable, rather than every busy 1-to-0 transition. The busy transition may be used only if it is established to mean exactly that completion condition.",
+    "REQ-0048": "off-target: The check's False path is unlicensed because it convicts a design for not asserting busy, although this requirement only requires START detection. The trigger should represent the START condition itself, without making busy-low part of the requirement's scope, and the assertion must use a port-level indication whose relationship to START detection is stated in this requirement. Alternatively, the specification must explicitly state that busy rises at the START-detection boundary; as written, the busy assertion belongs to REQ-0050.",
+    "REQ-0081": "not-assertable: The sentence lacks a specified effect, and therefore lacks a falsifiable obligation. It would need to say what observable behavior must occur while bus-status detection is active, such as a required scl_oen or cmd_ack behavior.",
+    "REQ-0052": "off-target: The trigger must additionally establish that the current command is non-STOP, using an explicitly specified command encoding or another declared observable indication. As written, it can convict on STOP events during a STOP command, which is outside the requirement's scope.",
+    "REQ-0012": "off-target: The check's trigger must be restricted to the synchronous reset observation point: a rising edge of clk with rst high (and, if retaining the qualification, nReset high), with the assertion evaluated immediately after that edge. More fundamentally, the asserted output values must be justified by REQ-0012 itself or by an observation route whose effect belongs to REQ-0012; the current scl_oen, sda_oen, and related reset-value assertions are borrowed from REQ-0068. A non-rising qualified row with any expected output wrong is an unlicensed False path.",
+    "REQ-0087": "off-target: There is no unlicensed False path because the code never returns False. The defect is that the trigger is the already-observed busy-qualified scl_oen transition rather than the counter-expiration situation (or an observable pre-transition proxy for an active command sequence waiting at counter expiration), and the assertion must then require the permitted subsequent FSM advancement visible at scl_oen. As written, it tests the neighboring phase-transition requirement rather than REQ-0087.",
+    "REQ-0108": "off-target: The check's trigger must be rebuilt around the WRITE command sequence: cmd presented with the WRITE encoding while ena is 1, with the specified reset/arbitration aborts, rather than using the scl_oen release edge as the trigger. The cmd encoding must come from an authoritative interface encoding; a bare numeric value is not licensed here by the interface. The cmd_ack pulse check must also remain scoped to that WRITE window, and the unlicensed cmd_ack != 1 conjunct on the SCL pull-low edge should be removed unless the requirement is amended to state that condition.",
+    "REQ-0099": "off-target: The trigger is wrong: it must be the accepted START command while enabled, rather than any SDA pull-low transition with SCL released. In addition, end-of-trace absence of the later response must not itself return False; it should be treated as no verdict unless completion is explicitly made strong. The requirement's visible effect is otherwise represented by the declared ports.",
+    "REQ-0100": "off-target: The trigger must be restricted to a demonstrated STOP execution, such as an accepted cmd=2 command or another STOP-specific activation signature, rather than any busy rising edge. Abort/reset termination should discard the attempt or yield no verdict, and an execution that reaches the end of the trace before the response should not be convicted merely because the transition was not observed.",
+    "REQ-0056": "not-assertable: The sentence has a trigger and an effect, but the visibility is missing: no declared port exposes clk_en or otherwise distinguishes FSM advances made with clk_en asserted from advances made without it. scl_oen alone is insufficient to decide this relation.",
+    "REQ-0113": "off-target: The check's trigger must be command-sequence completion (START, STOP, READ, or WRITE), with reset/arbitration aborts handled as discarded attempts if applicable, and then it must assert that cmd_ack is high for exactly one clk cycle. Triggering on cmd_ack being high with ena active and reset inactive is not sufficient because it can convict pulses unrelated to a sequence completion.",
+    "REQ-0105": "off-target: The check has an unlicensed False path because its trigger is any scl_i rising edge with scl_oen == 1, while the requirement applies only after completion of a read bit cycle. Rebuild the activation/window so it opens only at the read bit cycle completion event; do not convict on earlier or unrelated released SCL rising edges. The missing FSM-idle assertion is not itself a correspondence defect because it only makes the check weaker.",
+    "REQ-0043": "off-target: The trigger must be restricted to the specified situation: an external scl_i falling edge caused by another master during an active WRITE bit's stable-high phase while scl_oen is 1. The strong eventual assertion must also be made weak, or otherwise given an explicitly licensed timing bound, so trace termination before the response yields no verdict rather than False.",
+    "REQ-0014": "off-target: The check must rebuild its trigger/window around the licensed condition: the FSM is idle, a valid command is held, `ena` is low, and the window spans the timing interval in which that command would otherwise be accepted or completed. Its assertion should check the observable consequence of prevented progression: `busy` remains deasserted where that state is required, and `cmd_ack` does not rise/pulse, rather than requiring `cmd_ack == 0` on every row. It should not convict merely because `busy` is high or `cmd_ack` is already high outside those conditions.",
+    "REQ-0068": "off-target: The synchronous-reset trigger must only demand the reset outputs on the next rising edge of `clk` (and thereafter while synchronous reset remains active), rather than on every row where `rst == 1`. The asynchronous `nReset == 0` path may retain immediate checking.",
+    "REQ-0088": "off-target: The sentence has both a trigger and an effect, but the authorization trigger (`clk_en` assertion/counter expiry) is not visible at a declared port. The check would need a declared observation of `clk_en` or the counter-expiry boundary, then open a window on phase advances or timing boundaries and assert that advancement occurs only when that authorization is present. `scl_oen` alone is insufficient.",
+    "REQ-0051": "off-target: The check has an overbroad trigger and window. It must trigger only on the condition that the controller expects SDA released high and filtered SDA is low, and must not require al to remain high after that condition has ended. In particular, the current sda_oen==din test admits din=0 cases, and the WHILE_ACTIVE window extends the assertion beyond the requirement's stated condition.",
+    "REQ-0076": "not-assertable: The sentence lacks an actionable trigger and externally visible effect: it is a definition of the filtered signals rather than an obligation on the design. The check would need a separate requirement stating what observable port behavior must result from treating sSCL and sSDA as stable filtered versions; busy-based START/STOP assertions cannot be borrowed from REQ-0050.",
+    "REQ-0060": "not-assertable: Both a trigger and an effect are absent: the sentence states no behavioural obligation at all.",
+    "REQ-0102": "no discrimination stated"
+  },
+  "repair_narrowing": {
+    "REQ-0058": [
+      {
+        "round": 1,
+        "was": 7,
+        "now": 0
+      }
+    ]
+  },
+  "stimulus_liveness": {
+    "testpoints": 7,
+    "inert": [],
+    "inert_count": 0
+  },
+  "oracle_liveness": {
+    "counts": {
+      "live": 14,
+      "dead-oracle": 0,
+      "dead-stimulus": 0,
+      "unknown": 23
+    },
+    "verdicts": {
+      "REQ-0004": "live",
+      "REQ-0011": "unknown",
+      "REQ-0012": "unknown",
+      "REQ-0014": "unknown",
+      "REQ-0021": "unknown",
+      "REQ-0022": "unknown",
+      "REQ-0023": "live",
+      "REQ-0024": "unknown",
+      "REQ-0029": "live",
+      "REQ-0034": "live",
+      "REQ-0038": "unknown",
+      "REQ-0041": "unknown",
+      "REQ-0043": "unknown",
+      "REQ-0045": "unknown",
+      "REQ-0046": "unknown",
+      "REQ-0048": "unknown",
+      "REQ-0051": "unknown",
+      "REQ-0052": "unknown",
+      "REQ-0056": "unknown",
+      "REQ-0062": "live",
+      "REQ-0065": "live",
+      "REQ-0068": "live",
+      "REQ-0076": "unknown",
+      "REQ-0081": "unknown",
+      "REQ-0086": "unknown",
+      "REQ-0087": "live",
+      "REQ-0088": "unknown",
+      "REQ-0091": "unknown",
+      "REQ-0093": "live",
+      "REQ-0098": "unknown",
+      "REQ-0099": "live",
+      "REQ-0100": "live",
+      "REQ-0102": "unknown",
+      "REQ-0105": "unknown",
+      "REQ-0108": "live",
+      "REQ-0109": "live",
+      "REQ-0113": "live"
+    },
+    "dead_oracle": [],
+    "dead_stimulus": [],
+    "asserts_on": {
+      "REQ-0004": [
+        "scl_o",
+        "sda_o"
+      ],
+      "REQ-0011": [],
+      "REQ-0012": [],
+      "REQ-0014": [],
+      "REQ-0021": [],
+      "REQ-0022": [],
+      "REQ-0023": [
+        "busy"
+      ],
+      "REQ-0024": [],
+      "REQ-0029": [
+        "sda_oen"
+      ],
+      "REQ-0034": [
+        "scl_o",
+        "sda_o"
+      ],
+      "REQ-0038": [],
+      "REQ-0041": [],
+      "REQ-0043": [],
+      "REQ-0045": [],
+      "REQ-0046": [],
+      "REQ-0048": [],
+      "REQ-0051": [],
+      "REQ-0052": [],
+      "REQ-0056": [],
+      "REQ-0062": [
+        "sda_oen"
+      ],
+      "REQ-0065": [
+        "busy"
+      ],
+      "REQ-0068": [
+        "al",
+        "busy",
+        "cmd_ack",
+        "scl_oen",
+        "sda_oen"
+      ],
+      "REQ-0076": [],
+      "REQ-0081": [],
+      "REQ-0086": [],
+      "REQ-0087": [
+        "busy"
+      ],
+      "REQ-0088": [],
+      "REQ-0091": [],
+      "REQ-0093": [
+        "al"
+      ],
+      "REQ-0098": [],
+      "REQ-0099": [
+        "al",
+        "scl_oen",
+        "sda_oen"
+      ],
+      "REQ-0100": [
+        "busy"
+      ],
+      "REQ-0102": [],
+      "REQ-0105": [],
+      "REQ-0108": [
+        "cmd_ack",
+        "scl_oen"
+      ],
+      "REQ-0109": [
+        "scl_o",
+        "sda_o"
+      ],
+      "REQ-0113": [
+        "cmd_ack"
+      ]
+    }
+  }
+}

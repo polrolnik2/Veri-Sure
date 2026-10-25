@@ -1,0 +1,8 @@
+c1-i2c stimulus steps, by how each one decides when it is over:
+  hold only                          810    43%
+  until (waits for a condition)      695    37%
+  reset                              184    10%
+  bare -- one edge                   183    10%
+
+hold-only values: median 3  mean 5.7  max 64
+899 of 1872 steps (48%) drive for eight edges or fewer, against a design where one testpoint's prescaler needs 506 edges for a single command.

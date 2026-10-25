@@ -630,7 +630,14 @@ def build_trace_report(
         fo["sig"] for fo in fail_outputs if fo.get("sig")
     ]
     if not fail_signal_names:
-        fail_signal_names = ports["outputs"]
+        # A checks-only specflow payload has no mismatch rows to parse; it names
+        # the ports its failing checks read instead, which roots the slice at
+        # what was actually judged rather than at every output.
+        try:
+            check_ports = (json.loads(sim_log_json).get("trace") or {}).get("check_ports")
+        except Exception:  # noqa: BLE001
+            check_ports = None
+        fail_signal_names = [str(p) for p in check_ports or []] or ports["outputs"]
 
     # Composition nodes: child-facing exports (<child>_<port>) are not in the
     # TB-checked fan-in, so seed the trace roots with them explicitly.

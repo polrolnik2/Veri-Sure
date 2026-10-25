@@ -1,0 +1,12 @@
+{
+  "backend": "specflow",
+  "history": [
+    "iter 0: EXTEND_TB (0 failing)"
+  ],
+  "artifacts": {
+    "ok": true,
+    "stage": "",
+    "reason": "artifacts built"
+  },
+  "verdict": "EXTEND_TB"
+}

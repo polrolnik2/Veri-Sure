@@ -1,0 +1,63 @@
+{
+  "reasoning": "The spec describes a combinational half adder named TopModule with one-bit ports a, b, sum, cout. A half adder has exactly two independently checkable output behaviours -- the sum bit and the carry-out bit -- so the decomposition is two requirements, one reference-model method each. The interface paragraph and the port list are not behaviour on their own, so per the instructions they are attributed to the requirements they constrain: the preamble sentence (module name, and all ports one bit) plus the a/b/sum port lines are claimed by the sum requirement starting at offset 0, and the cout port line by the carry-out requirement. The half-adder sentence is claimed by both requirements because it is the source of both behaviours and it also fixes 'no carry-in', i.e. only a and b feed the outputs. Every non-whitespace character of the 328-character spec is therefore covered. Nothing was invented: the spec states plain one-bit binary inputs and is silent about timing, which the contract pins to zero-latency combinational outputs, so no guessed behaviour was added and there is nothing underdetermined.",
+  "requirements": [
+    {
+      "uid": "REQ-0000",
+      "text": "The one-bit output sum of module TopModule is the exclusive-OR of the one-bit inputs a and b, i.e. the half-adder sum of the two input bits with no carry-in.",
+      "rev": 1,
+      "spec_spans": [
+        {
+          "start": 0,
+          "end": 151,
+          "quote": "I would like you to implement a module named TopModule with the following\ninterface. All input and output ports are one bit unless otherwise\nspecified."
+        },
+        {
+          "start": 153,
+          "end": 190,
+          "quote": " - input  a\n - input  b\n - output sum"
+        },
+        {
+          "start": 207,
+          "end": 328,
+          "quote": "The module should implement a half adder. A half adder adds two bits\n(with no carry-in) and produces a sum and carry-out."
+        }
+      ],
+      "ports": [
+        "a",
+        "b",
+        "sum"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    },
+    {
+      "uid": "REQ-0001",
+      "text": "The one-bit output cout of module TopModule is the logical AND of the one-bit inputs a and b, i.e. the half-adder carry-out that is 1 only when both input bits are 1.",
+      "rev": 1,
+      "spec_spans": [
+        {
+          "start": 191,
+          "end": 205,
+          "quote": " - output cout"
+        },
+        {
+          "start": 207,
+          "end": 328,
+          "quote": "The module should implement a half adder. A half adder adds two bits\n(with no carry-in) and produces a sum and carry-out."
+        }
+      ],
+      "ports": [
+        "a",
+        "b",
+        "cout"
+      ],
+      "needs": [
+        "testplan",
+        "refmodel"
+      ]
+    }
+  ],
+  "underdetermined": []
+}
